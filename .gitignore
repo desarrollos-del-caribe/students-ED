@@ -1,5 +1,7 @@
 # Entorno virtual
 venv/
+*/Lib/site-packages/
+*/lib/python*/site-packages/
 
 # Archivos temporales de Python
 __pycache__/
@@ -7,8 +9,7 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Archivos generados
-static/plot.png
+static/
 
 # Archivos de sistema
 .DS_Store
