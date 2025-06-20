@@ -1,6 +1,8 @@
 import logging
 import pandas as pd
 import os
+import matplotlib
+matplotlib.use('Agg')  # Backend sin GUI
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
@@ -73,9 +75,41 @@ def validate_countries():
             return df
         if 'Country' not in df.columns:
             return jsonify({"error": "Columna 'Country' no encontrada en el dataset"}), 400
+
         valid_countries = int(df['Country'].nunique())
-        country_counts = df['Country'].value_counts().head(10).to_dict()
-        return {"data": {"countries": {"valid_countries": valid_countries, "country_counts": country_counts}}}, 200
+        
+        # Serie de conteos para graficar
+        country_series = df['Country'].value_counts().head(10)
+
+        # Diccionario para el JSON
+        country_counts = country_series.to_dict()
+
+        # === Generar gráfica ===
+        plots_dir = os.path.join(os.path.dirname(__file__), 'static', 'plots')
+        os.makedirs(plots_dir, exist_ok=True)
+        filename = "countries_graph.png"
+        graph_path = os.path.join(plots_dir, filename)
+
+        plt.figure(figsize=(12, 6))
+        country_series.plot(kind='bar', color='skyblue')
+        plt.title('Top 10 países con más estudiantes')
+        plt.xlabel('País')
+        plt.ylabel('Cantidad de estudiantes')
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.savefig(graph_path)
+        plt.close()
+
+        return {
+            "data": {
+                "countries": {
+                    "valid_countries": valid_countries,
+                    "country_counts": country_counts,
+                    "graph": f"/static/plots/{filename}"
+                }
+            }
+        }, 200
+
     except Exception as e:
         return jsonify({"error": f"Error en validate_countries: {str(e)}"}), 500
 
