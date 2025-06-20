@@ -10,9 +10,7 @@ from services import (
     linear_regression_analysis,
     logistic_regression_analysis,
     correlation_analysis,
-    decision_tree_analysis,
-    anova_analysis
-)
+    decision_tree_analysis)
 
 app = Flask(__name__)
 CORS(app)
@@ -65,11 +63,6 @@ def api_correlation():
 @app.route('/api/decision-tree', methods=['GET'])
 def api_decision_tree():
     response, status = decision_tree_analysis()
-    return response, status
-
-@app.route('/api/anova', methods=['GET'])
-def api_anova():
-    response, status = anova_analysis()
     return response, status
 
 if __name__ == '__main__':
