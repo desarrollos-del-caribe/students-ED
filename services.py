@@ -2,7 +2,7 @@ import logging
 import pandas as pd
 import os
 import matplotlib
-matplotlib.use('Agg')  # Backend sin GUI
+matplotlib.use('Agg')  
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.cluster import KMeans
@@ -72,13 +72,10 @@ def validate_countries():
 
         valid_countries = int(df['Country'].nunique())
         
-        # Serie de conteos para graficar
         country_series = df['Country'].value_counts().head(10)
 
-        # Diccionario para el JSON
         country_counts = country_series.to_dict()
 
-        # === Generar gráfica ===
         plots_dir = os.path.join(os.path.dirname(__file__), 'static', 'plots')
         os.makedirs(plots_dir, exist_ok=True)
         filename = "countries_graph.png"
@@ -227,7 +224,6 @@ def linear_regression_analysis():
 
         try:
             plt.figure(figsize=(10, 6))
-            # Plot scatter of Avg_Daily_Usage_Hours vs Addicted_Score, colored by Mental_Health_Score
             scatter = plt.scatter(
                 df['Avg_Daily_Usage_Hours'],
                 df['Addicted_Score'],
@@ -237,9 +233,7 @@ def linear_regression_analysis():
             )
             plt.colorbar(scatter, label='Puntuación de Salud Mental')
             
-            # Calculate regression line using only Avg_Daily_Usage_Hours for simplicity
             x_vals = [min(df['Avg_Daily_Usage_Hours']), max(df['Avg_Daily_Usage_Hours'])]
-            # Use mean Mental_Health_Score for the regression line to reduce dimensionality
             mean_mental_health = df['Mental_Health_Score'].mean()
             y_vals = [
                 intercept + coefficients['coef_Avg_Daily_Usage_Hours'] * x + 
@@ -318,7 +312,6 @@ def logistic_regression_analysis():
                 alpha=0.7
             )
 
-            # Create a grid for decision boundary without numpy
             x_min, x_max = min(df['Avg_Daily_Usage_Hours']), max(df['Avg_Daily_Usage_Hours'])
             y_min, y_max = min(df['Sleep_Hours_Per_Night']), max(df['Sleep_Hours_Per_Night'])
             x_step = (x_max - x_min) / 100
@@ -329,12 +322,10 @@ def logistic_regression_analysis():
             for x in [x_min + i * x_step for i in range(100)]:
                 for y in [y_min + j * y_step for j in range(100)]:
                     grid_points.append([x, y])
-                    # Logistic function: 1 / (1 + exp(-(b0 + b1*x + b2*y)))
                     z = intercept + coefficients['coef_Avg_Daily_Usage_Hours'] * x + coefficients['coef_Sleep_Hours_Per_Night'] * y
-                    prob = 1 / (1 + 2.71828 ** (-z))  # Using math constant e ≈ 2.71828
+                    prob = 1 / (1 + 2.71828 ** (-z))  
                     grid_predictions.append(1 if prob >= 0.5 else 0)
             
-            # Reshape predictions into a grid-like structure for contour plotting
             grid_x = [x_min + i * x_step for i in range(100)]
             grid_y = [y_min + j * y_step for j in range(100)]
             grid_z = []
