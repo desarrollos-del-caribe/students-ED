@@ -17,6 +17,20 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 def load_data():
+    data_folder = 'data'
+    for ext in ['csv', 'xlsx', 'xls', 'json']:
+        path = os.path.join(data_folder, f'data.{ext}')
+        if os.path.exists(path):
+            if ext == 'csv':
+                return pd.read_csv(path)
+            elif ext in ['xlsx', 'xls']:
+                return pd.read_excel(path)
+            elif ext == 'json':
+                return pd.read_json(path)
+    raise FileNotFoundError("No hay datos válidos cargados")
+
+
+def load_data():
     try:
         file_path = os.path.join(os.path.dirname(__file__), 'data', 'Students_Addiction.xlsx')
         df = pd.read_excel(file_path)
