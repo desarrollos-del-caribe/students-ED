@@ -1,75 +1,20 @@
-from flask import Flask, request
+from flask import Flask, request, jsonify, request
 from flask_cors import CORS
-import os
-import pandas as pd
-
-# Servicios de análisis
-from services import (
-    validate_age,
-    validate_countries,
-    get_null_info,
-    get_statistics,
-    detect_outliers,
-    generate_plots,
-    linear_regression_analysis,
-    logistic_regression_analysis,
-    correlation_analysis,
-    decision_tree_analysis
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from services.data_processor import process_and_insert_data
+from services.analysis_model import (
+    social_media_addiction_risk,
+    academic_performance_risk,
+    sleep_prediction,
+    get_platform_distribution
 )
-
+import pymssql
+from config import Config
+import logging
 
 app = Flask(__name__)
 CORS(app)
-
-UPLOAD_FOLDER = 'data'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-ALLOWED_EXTENSIONS = {'csv', 'xlsx', 'xls', 'json', 'sql'}
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-@app.route('/api/upload-data', methods=['POST'])
-def upload_data():
-    if 'file' not in request.files:
-        return {'error': 'No se encontró el archivo en la solicitud'}, 400
-
-    file = request.files['file']
-
-    if file.filename == '':
-        return {'error': 'No se seleccionó ningún archivo'}, 400
-
-    if not allowed_file(file.filename):
-        return {'error': f'Formato no permitido. Solo se aceptan: {", ".join(ALLOWED_EXTENSIONS)}'}, 400
-
-    try:
-        extension = file.filename.rsplit('.', 1)[1].lower()
-        filename = f"Students_Addiction.xlsx"
-        filepath = os.path.join(UPLOAD_FOLDER, filename)
-
-        # Leer y convertir a DataFrame según tipo
-        if extension == 'csv':
-            df = pd.read_csv(file)
-        elif extension in ['xls', 'xlsx']:
-            df = pd.read_excel(file)
-        elif extension == 'json':
-            df = pd.read_json(file)
-        elif extension == 'sql':
-            sql_content = file.read().decode('utf-8')
-            return {'error': 'Archivos .sql no se pueden convertir directamente a Excel'}, 400
-        else:
-            return {'error': 'Formato no reconocido'}, 400
-
-        # Guardar como Excel
-        df.to_excel(filepath, index=False, engine='openpyxl')
-
-        return {
-            'message': f'Archivo convertido y guardado correctamente como {filename}',
-            'filename': filename
-        }, 200
-
-    except Exception as e:
-        return {'error': f'No se pudo guardar el archivo: {str(e)}'}, 500
 
 @app.route('/api/validate-age', methods=['GET'])
 def api_validate_age():
@@ -111,16 +56,29 @@ def api_logistic_regression():
     response, status = logistic_regression_analysis()
     return response, status
 
-@app.route('/api/correlation', methods=['GET'])
-def api_correlation():
-    response, status = correlation_analysis()
-    return response, status
+@app.route('/predict/sleep', methods=['POST', 'OPTIONS'])
+@limiter.limit("10 per minute")
+def predict_sleep():
+    logger.info(f"Solicitud recibida: {request.method} {request.path} from {request.remote_addr} con User-Agent: {request.headers.get('User-Agent')}")
+    if request.method == 'OPTIONS':
+        return '', 200
+    data = request.get_json()
+    result = sleep_prediction(
+        data.get('usage_hours', 0),
+        data.get('age', 0),
+        data.get('mental_health_score', 0)
+    )
+    return jsonify({'sleep_hours': result})
 
-@app.route('/api/decision-tree', methods=['GET'])
-def api_decision_tree():
-    response, status = decision_tree_analysis()
-    return response, status
+@app.route('/stats/platforms', methods=['GET', 'OPTIONS'])
+@limiter.limit("20 per minute")
+def get_platform_stats():
+    logger.info(f"Solicitud recibida: {request.method} {request.path} from {request.remote_addr} con User-Agent: {request.headers.get('User-Agent')}")
+    if request.method == 'OPTIONS':
+        return '', 200
+    result = get_platform_distribution()
+    return jsonify(result)
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True)
