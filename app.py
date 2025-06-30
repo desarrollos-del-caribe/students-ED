@@ -25,15 +25,7 @@ limiter = Limiter(
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-@app.before_request
-def restrict_access():
-    allowed_ips = ['127.0.0.1']
-    if request.remote_addr not in allowed_ips:
-        logger.warning(f"Acceso denegado desde {request.remote_addr} con User-Agent: {request.headers.get('User-Agent')}")
-        return jsonify({'error': 'Acceso no autorizado'}), 403
-
 @app.route('/upload', methods=['POST', 'OPTIONS'])
-@limiter.limit("20 per minute")
 def upload_file():
     logger.info(f"Solicitud recibida: {request.method} {request.path} from {request.remote_addr} con User-Agent: {request.headers.get('User-Agent')}")
     if request.method == 'OPTIONS':
@@ -48,7 +40,6 @@ def upload_file():
     return jsonify(result), status_code
 
 @app.route('/students', methods=['GET', 'OPTIONS'])
-@limiter.limit("20 per minute")
 def get_students():
     logger.info(f"Solicitud recibida: {request.method} {request.path} from {request.remote_addr} con User-Agent: {request.headers.get('User-Agent')}")
     if request.method == 'OPTIONS':
@@ -71,7 +62,6 @@ def get_students():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/student/<int:student_id>', methods=['GET', 'OPTIONS'])
-@limiter.limit("20 per minute")
 def get_student(student_id):
     logger.info(f"Solicitud recibida: {request.method} {request.path} from {request.remote_addr} con User-Agent: {request.headers.get('User-Agent')}")
     if request.method == 'OPTIONS':
@@ -97,7 +87,6 @@ def get_student(student_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/predict/addiction', methods=['POST', 'OPTIONS'])
-@limiter.limit("50 per minute")
 def predict_addiction():
     logger.info(f"Solicitud recibida: {request.method} {request.path} from {request.remote_addr} con User-Agent: {request.headers.get('User-Agent')}")
     if request.method == 'OPTIONS':
@@ -112,7 +101,6 @@ def predict_addiction():
     return jsonify({'addiction_risk': result})
 
 @app.route('/predict/academic', methods=['POST', 'OPTIONS'])
-@limiter.limit("10 per minute")
 def predict_academic():
     logger.info(f"Solicitud recibida: {request.method} {request.path} from {request.remote_addr} con User-Agent: {request.headers.get('User-Agent')}")
     if request.method == 'OPTIONS':
@@ -126,7 +114,6 @@ def predict_academic():
     return jsonify({'academic_risk': result['risk'], 'probability': result['probability']})
 
 @app.route('/predict/sleep', methods=['POST', 'OPTIONS'])
-@limiter.limit("10 per minute")
 def predict_sleep():
     logger.info(f"Solicitud recibida: {request.method} {request.path} from {request.remote_addr} con User-Agent: {request.headers.get('User-Agent')}")
     if request.method == 'OPTIONS':
@@ -140,7 +127,6 @@ def predict_sleep():
     return jsonify({'sleep_hours': result})
 
 @app.route('/stats/platforms', methods=['GET', 'OPTIONS'])
-@limiter.limit("20 per minute")
 def get_platform_stats():
     logger.info(f"Solicitud recibida: {request.method} {request.path} from {request.remote_addr} con User-Agent: {request.headers.get('User-Agent')}")
     if request.method == 'OPTIONS':
@@ -149,4 +135,4 @@ def get_platform_stats():
     return jsonify(result)
 
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=5000, debug=False)
+    app.run(host='*', port=5000, debug=False)
