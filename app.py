@@ -14,7 +14,7 @@ from config import Config
 import logging
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}})
+CORS(app, resources={r"/*": {"origins": "*"}})
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
