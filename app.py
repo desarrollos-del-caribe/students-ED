@@ -1,273 +1,152 @@
-from flask import Flask, jsonify
+from flask import Flask, request, jsonify
 from flask_cors import CORS
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.tree import DecisionTreeClassifier, plot_tree
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import LabelEncoder, MinMaxScaler
-import os
-import warnings
-warnings.filterwarnings('ignore')
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from services.data_processor import process_and_insert_data
+from services.analysis_model import (
+    social_media_addiction_risk,
+    academic_performance_risk,
+    sleep_prediction,
+    get_platform_distribution
+)
+import pymssql
+from config import Config
+import logging
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}})
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["500 per day", "100 per hour"],
+    storage_uri="memory://"
+)
 
-# Crear directorio static si no existe
-if not os.path.exists('static'):
-    os.makedirs('static')
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-def load_data():
+@app.before_request
+def restrict_access():
+    allowed_ips = ['127.0.0.1']
+    if request.remote_addr not in allowed_ips:
+        logger.warning(f"Acceso denegado desde {request.remote_addr} con User-Agent: {request.headers.get('User-Agent')}")
+        return jsonify({'error': 'Acceso no autorizado'}), 403
+
+@app.route('/upload', methods=['POST', 'OPTIONS'])
+@limiter.limit("20 per minute")
+def upload_file():
+    logger.info(f"Solicitud recibida: {request.method} {request.path} from {request.remote_addr} con User-Agent: {request.headers.get('User-Agent')}")
+    if request.method == 'OPTIONS':
+        return '', 200
+    if 'file' not in request.files:
+        return jsonify({'error': 'No se proporcionó archivo'}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'Nombre de archivo vacío'}), 400
+    result = process_and_insert_data(file)
+    status_code = 200 if result.get('success') else 409
+    return jsonify(result), status_code
+
+@app.route('/students', methods=['GET', 'OPTIONS'])
+@limiter.limit("20 per minute")
+def get_students():
+    logger.info(f"Solicitud recibida: {request.method} {request.path} from {request.remote_addr} con User-Agent: {request.headers.get('User-Agent')}")
+    if request.method == 'OPTIONS':
+        return '', 200
     try:
-        df = pd.read_excel('data/Students_Addiction.xlsx')
-        return df
+        conn = Config.get_connection()
+        cursor = conn.cursor(as_dict=True)
+        cursor.execute("""
+            SELECT id, age, gender_id, academic_level_id, country_id, avg_daily_used_hours,
+                   social_network_id, affects_academic_performance, sleep_hours_per_night,
+                   mental_health_score, relationship_status_id, conflicts_over_social_media,
+                   addicted_score
+            FROM Tbl_Students_Model WHERE history_models_import_id = 1
+        """)
+        students = cursor.fetchall()
+        conn.close()
+        return jsonify({'students': students}), 200
     except Exception as e:
-        return {"error": f"Error al cargar el archivo: {str(e)}"}
+        logger.error(f"Error obteniendo estudiantes: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
-def clean_data(df):
-    df = df.drop_duplicates()
-    if df.isnull().sum().any():
-        df = df.fillna({
-            'Age': df['Age'].mean(),
-            'Avg_Daily_Usage_Hours': df['Avg_Daily_Usage_Hours'].mean(),
-            'Sleep_Hours_Per_Night': df['Sleep_Hours_Per_Night'].mean(),
-            'Mental_Health_Score': df['Mental_Health_Score'].mean(),
-            'Conflicts_Over_Social_Media': df['Conflicts_Over_Social_Media'].mean(),
-            'Addicted_Score': df['Addicted_Score'].mean(),
-            'Gender': 'Unknown',
-            'Country': 'Unknown',
-            'Most_Used_Platform': 'Unknown',
-            'Relationship_Status': 'Unknown'
-        })
-    return df
+@app.route('/student/<int:student_id>', methods=['GET', 'OPTIONS'])
+@limiter.limit("20 per minute")
+def get_student(student_id):
+    logger.info(f"Solicitud recibida: {request.method} {request.path} from {request.remote_addr} con User-Agent: {request.headers.get('User-Agent')}")
+    if request.method == 'OPTIONS':
+        return '', 200
+    try:
+        conn = Config.get_connection()
+        cursor = conn.cursor(as_dict=True)
+        cursor.execute("""
+            SELECT id, age, gender_id, academic_level_id, country_id, avg_daily_used_hours,
+                   social_network_id, affects_academic_performance, sleep_hours_per_night,
+                   mental_health_score, relationship_status_id, conflicts_over_social_media,
+                   addicted_score
+            FROM Tbl_Students_Model
+            WHERE id = %s
+        """, (student_id,))
+        student = cursor.fetchone()
+        conn.close()
+        if not student:
+            return jsonify({'error': 'Estudiante no encontrado'}), 404
+        return jsonify({'student': student}), 200
+    except Exception as e:
+        logger.error(f"Error obteniendo estudiante {student_id}: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
-def normalize_data(df):
-    scaler = MinMaxScaler()
-    numeric_cols = ['Age', 'Avg_Daily_Usage_Hours', 'Sleep_Hours_Per_Night',
-                    'Mental_Health_Score', 'Conflicts_Over_Social_Media', 'Addicted_Score']
-    df[numeric_cols] = scaler.fit_transform(df[numeric_cols])
-    return df
+@app.route('/predict/addiction', methods=['POST', 'OPTIONS'])
+@limiter.limit("50 per minute")
+def predict_addiction():
+    logger.info(f"Solicitud recibida: {request.method} {request.path} from {request.remote_addr} con User-Agent: {request.headers.get('User-Agent')}")
+    if request.method == 'OPTIONS':
+        return '', 200
+    data = request.get_json()
+    result = social_media_addiction_risk(
+        data.get('usage_hours', 0),
+        data.get('addicted_score', 0),
+        data.get('mental_health_score', 0),
+        data.get('conflicts_score', 0)
+    )
+    return jsonify({'addiction_risk': result})
 
-@app.route('/api/validate-age', methods=['GET'])
-def validate_age():
-    df = load_data()
-    if isinstance(df, dict):
-        return jsonify(df), 500
-    df = clean_data(df)
-    info = {
-        "min_age": df['Age'].min(),
-        "max_age": df['Age'].max(),
-        "invalid_ages": df[~((df['Age'] >= 16) & (df['Age'] <= 25))].shape[0]
-    }
-    return jsonify(info)
+@app.route('/predict/academic', methods=['POST', 'OPTIONS'])
+@limiter.limit("10 per minute")
+def predict_academic():
+    logger.info(f"Solicitud recibida: {request.method} {request.path} from {request.remote_addr} con User-Agent: {request.headers.get('User-Agent')}")
+    if request.method == 'OPTIONS':
+        return '', 200
+    data = request.get_json()
+    result = academic_performance_risk(
+        data.get('usage_hours', 0),
+        data.get('sleep_hours', 0),
+        data.get('mental_health_score', 0)
+    )
+    return jsonify({'academic_risk': result['risk'], 'probability': result['probability']})
 
-@app.route('/api/validate-countries', methods=['GET'])
-def validate_countries():
-    df = load_data()
-    if isinstance(df, dict):
-        return jsonify(df), 500
-    df = clean_data(df)
-    valid_countries = df['Country'].nunique()
-    country_counts = df['Country'].value_counts().head(10).to_dict()
-    return jsonify({"valid_countries": valid_countries, "country_counts": country_counts})
+@app.route('/predict/sleep', methods=['POST', 'OPTIONS'])
+@limiter.limit("10 per minute")
+def predict_sleep():
+    logger.info(f"Solicitud recibida: {request.method} {request.path} from {request.remote_addr} con User-Agent: {request.headers.get('User-Agent')}")
+    if request.method == 'OPTIONS':
+        return '', 200
+    data = request.get_json()
+    result = sleep_prediction(
+        data.get('usage_hours', 0),
+        data.get('age', 0),
+        data.get('mental_health_score', 0)
+    )
+    return jsonify({'sleep_hours': result})
 
-@app.route('/api/validate-trimester', methods=['GET'])
-def validate_trimester():
-    df = load_data()
-    if isinstance(df, dict):
-        return jsonify(df), 500
-    df = clean_data(df)
-    outliers = df[df['Avg_Daily_Usage_Hours'] > 10].shape[0]
-    return jsonify({"outliers": outliers})
-
-@app.route('/api/statistics', methods=['GET'])
-def statistics():
-    df = load_data()
-    if isinstance(df, dict):
-        return jsonify(df), 500
-    df = clean_data(df)
-    stats = df[['Age', 'Avg_Daily_Usage_Hours', 'Sleep_Hours_Per_Night', 
-                'Mental_Health_Score', 'Conflicts_Over_Social_Media', 'Addicted_Score']].describe().to_dict()
-    return jsonify(stats)
-
-@app.route('/api/null-info', methods=['GET'])
-def null_info():
-    df = load_data()
-    if isinstance(df, dict):
-        return jsonify(df), 500
-    df = clean_data(df)
-    null_counts = df.isnull().sum().to_dict()
-    total_nulls = sum(null_counts.values())
-    return jsonify({"null_counts": null_counts, "total_nulls": total_nulls})
-
-@app.route('/api/predict-conflicts', methods=['GET'])
-def predict_conflicts():
-    df = load_data()
-    if isinstance(df, dict):
-        return jsonify(df), 500
-    df = clean_data(df)
-    le_gender = LabelEncoder()
-    le_platform = LabelEncoder()
-    le_relationship = LabelEncoder()
-    df['Gender_Encoded'] = le_gender.fit_transform(df['Gender'])
-    df['Platform_Encoded'] = le_platform.fit_transform(df['Most_Used_Platform'])
-    df['Relationship_Encoded'] = le_relationship.fit_transform(df['Relationship_Status'])
-    
-    X = df[['Age', 'Avg_Daily_Usage_Hours', 'Sleep_Hours_Per_Night',
-            'Mental_Health_Score', 'Gender_Encoded', 'Platform_Encoded',
-            'Relationship_Encoded', 'Affects_Academic_Performance']]
-    y = df['Conflicts_Over_Social_Media'].apply(lambda x: 1 if x >= 3 else 0)
-    
-    model = RandomForestClassifier(random_state=42)
-    model.fit(X, y)
-    df['Conflict_Prediction'] = model.predict(X)
-    summary = df.groupby('Relationship_Status')['Conflict_Prediction'].mean().to_dict()
-    summary_rounded = {k: round(v, 2) for k, v in summary.items()}
-    return jsonify(summary_rounded)
-
-@app.route('/api/decision-tree', methods=['GET'])
-def decision_tree():
-    df = load_data()
-    if isinstance(df, dict):
-        return jsonify(df), 500
-    df = clean_data(df)
-    le_gender = LabelEncoder()
-    le_platform = LabelEncoder()
-    le_relationship = LabelEncoder()
-    df['Gender_Encoded'] = le_gender.fit_transform(df['Gender'])
-    df['Platform_Encoded'] = le_platform.fit_transform(df['Most_Used_Platform'])
-    df['Relationship_Encoded'] = le_relationship.fit_transform(df['Relationship_Status'])
-    
-    X = df[['Age', 'Avg_Daily_Usage_Hours', 'Sleep_Hours_Per_Night',
-            'Mental_Health_Score', 'Gender_Encoded', 'Platform_Encoded',
-            'Relationship_Encoded', 'Affects_Academic_Performance']]
-    y = df['Conflicts_Over_Social_Media'].apply(lambda x: 1 if x >= 3 else 0)
-    
-    model = DecisionTreeClassifier(max_depth=4, random_state=42)
-    model.fit(X, y)
-    
-    plt.figure(figsize=(20, 10))
-    plot_tree(model, feature_names=X.columns, class_names=['Low Risk', 'High Risk'], filled=True)
-    plt.savefig('static/decision_tree.png')
-    plt.close()
-    
-    explanation = """
-    El árbol de decisión clasifica a los estudiantes en riesgo alto (Conflicts_Over_Social_Media ≥ 3) o bajo riesgo basado en las siguientes características:
-    - Edad
-    - Horas de uso diario
-    - Horas de sueño
-    - Puntuación de salud mental
-    - Género, plataforma, estado de relación
-    - Impacto académico
-    """
-    return jsonify({"explanation": explanation, "image": "/static/decision_tree.png"})
-
-@app.route('/api/clustering', methods=['GET'])
-def clustering():
-    df = load_data()
-    if isinstance(df, dict):
-        return jsonify(df), 500
-    df = clean_data(df)
-    scaler = MinMaxScaler()
-    X = scaler.fit_transform(df[['Avg_Daily_Usage_Hours', 'Sleep_Hours_Per_Night', 'Mental_Health_Score']])
-    kmeans = KMeans(n_clusters=3, random_state=42)
-    df['Cluster'] = kmeans.fit_predict(X)
-    
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection='3d')
-    scatter = ax.scatter(df['Avg_Daily_Usage_Hours'], df['Sleep_Hours_Per_Night'], 
-                        df['Mental_Health_Score'], c=df['Cluster'], cmap='viridis')
-    ax.set_xlabel('Horas de Uso Diario')
-    ax.set_ylabel('Horas de Sueño')
-    ax.set_zlabel('Puntuación de Salud Mental')
-    plt.title('Clustering de Estudiantes')
-    plt.colorbar(scatter, label='Cluster')
-    plt.savefig('static/clustering_3d.png')
-    plt.close()
-    
-    counts = df['Cluster'].value_counts().to_dict()
-    return jsonify({"cluster_counts": counts, "image": "/static/clustering_3d.png"})
-
-@app.route('/api/generate-plots', methods=['GET'])
-def generate_plots_endpoint():
-    df = load_data()
-    if isinstance(df, dict):
-        return jsonify(df), 500
-    df = clean_data(df)
-    
-    # Histograma
-    plt.figure(figsize=(8, 6))
-    sns.histplot(df['Age'], bins=10, kde=True, color='skyblue')
-    plt.title('Distribución de Edades')
-    plt.xlabel('Edad')
-    plt.ylabel('Frecuencia')
-    plt.savefig('static/age_histogram.png')
-    plt.close()
-    
-    # Gráfico de barras por país
-    plt.figure(figsize=(12, 6))
-    country_counts = df['Country'].value_counts().head(10)
-    sns.barplot(x=country_counts.index, y=country_counts.values, palette='viridis')
-    plt.title('Número de Estudiantes por País (Top 10)')
-    plt.xlabel('País')
-    plt.ylabel('Número de Estudiantes')
-    plt.xticks(rotation=45)
-    plt.savefig('static/conflicts_by_country.png')
-    plt.close()
-    
-    # Gráfico 3D
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(df['Avg_Daily_Usage_Hours'], df['Sleep_Hours_Per_Night'], 
-              df['Mental_Health_Score'], c=df['Conflicts_Over_Social_Media'], 
-              cmap='coolwarm', s=50)
-    ax.set_xlabel('Horas de Uso Diario')
-    ax.set_ylabel('Horas de Sueño')
-    ax.set_zlabel('Puntuación de Salud Mental')
-    plt.title('Relación entre Uso, Sueño y Salud Mental')
-    plt.savefig('static/3d_plot.png')
-    plt.close()
-    
-    # Gráfico lineal
-    plt.figure(figsize=(10, 6))
-    sns.lineplot(x='Age', y='Avg_Daily_Usage_Hours', hue='Gender', data=df)
-    plt.title('Uso Diario de Redes Sociales por Edad y Género')
-    plt.xlabel('Edad')
-    plt.ylabel('Horas de Uso Diario')
-    plt.savefig('static/line_plot.png')
-    plt.close()
-    
-    # Boxplot
-    plt.figure(figsize=(10, 6))
-    sns.boxplot(x='Relationship_Status', y='Mental_Health_Score', data=df)
-    plt.title('Puntuación de Salud Mental por Estado de Relación')
-    plt.xlabel('Estado de Relación')
-    plt.ylabel('Puntuación de Salud Mental')
-    plt.savefig('static/boxplot.png')
-    plt.close()
-    
-    # Mapa de calor
-    plt.figure(figsize=(10, 8))
-    numeric_cols = ['Age', 'Avg_Daily_Usage_Hours', 'Sleep_Hours_Per_Night',
-                    'Mental_Health_Score', 'Conflicts_Over_Social_Media', 'Addicted_Score']
-    corr_matrix = df[numeric_cols].corr()
-    sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', vmin=-1, vmax=1)
-    plt.title('Matriz de Correlación')
-    plt.savefig('static/heatmap.png')
-    plt.close()
-    
-    images = {
-        "histogram": "/static/age_histogram.png",
-        "country_plot": "/static/conflicts_by_country.png",
-        "3d_plot": "/static/3d_plot.png",
-        "line_plot": "/static/line_plot.png",
-        "boxplot": "/static/boxplot.png",
-        "heatmap": "/static/heatmap.png"
-    }
-    
-    return jsonify(images)
+@app.route('/stats/platforms', methods=['GET', 'OPTIONS'])
+@limiter.limit("20 per minute")
+def get_platform_stats():
+    logger.info(f"Solicitud recibida: {request.method} {request.path} from {request.remote_addr} con User-Agent: {request.headers.get('User-Agent')}")
+    if request.method == 'OPTIONS':
+        return '', 200
+    result = get_platform_distribution()
+    return jsonify(result)
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(host='127.0.0.1', port=5000, debug=False)
