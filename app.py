@@ -7,21 +7,21 @@ from services.analysis_model import (
     social_media_addiction_risk,
     academic_performance_risk,
     sleep_prediction,
-    get_platform_distribution,
-    get_country_impact,
-    get_usage_mental_health_correlation
+    get_platform_distribution
 )
 import pymssql
 from config import Config
 import logging
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
+CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}})
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
-    default_limits=["500 per day", "100 per hour"]  # Aumentado para manejar predicciones iniciales
+    default_limits=["500 per day", "100 per hour"],
+    storage_uri="memory://"
 )
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -97,7 +97,7 @@ def get_student(student_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/predict/addiction', methods=['POST', 'OPTIONS'])
-@limiter.limit("20 per minute")
+@limiter.limit("50 per minute")
 def predict_addiction():
     logger.info(f"Solicitud recibida: {request.method} {request.path} from {request.remote_addr} con User-Agent: {request.headers.get('User-Agent')}")
     if request.method == 'OPTIONS':
@@ -112,7 +112,7 @@ def predict_addiction():
     return jsonify({'addiction_risk': result})
 
 @app.route('/predict/academic', methods=['POST', 'OPTIONS'])
-@limiter.limit("20 per minute")
+@limiter.limit("10 per minute")
 def predict_academic():
     logger.info(f"Solicitud recibida: {request.method} {request.path} from {request.remote_addr} con User-Agent: {request.headers.get('User-Agent')}")
     if request.method == 'OPTIONS':
@@ -123,10 +123,10 @@ def predict_academic():
         data.get('sleep_hours', 0),
         data.get('mental_health_score', 0)
     )
-    return jsonify({'academic_risk': result})
+    return jsonify({'academic_risk': result['risk'], 'probability': result['probability']})
 
 @app.route('/predict/sleep', methods=['POST', 'OPTIONS'])
-@limiter.limit("20 per minute")
+@limiter.limit("10 per minute")
 def predict_sleep():
     logger.info(f"Solicitud recibida: {request.method} {request.path} from {request.remote_addr} con User-Agent: {request.headers.get('User-Agent')}")
     if request.method == 'OPTIONS':
@@ -146,24 +146,6 @@ def get_platform_stats():
     if request.method == 'OPTIONS':
         return '', 200
     result = get_platform_distribution()
-    return jsonify(result)
-
-@app.route('/stats/country_impact', methods=['GET', 'OPTIONS'])
-@limiter.limit("20 per minute")
-def get_country_stats():
-    logger.info(f"Solicitud recibida: {request.method} {request.path} from {request.remote_addr} con User-Agent: {request.headers.get('User-Agent')}")
-    if request.method == 'OPTIONS':
-        return '', 200
-    result = get_country_impact()
-    return jsonify(result)
-
-@app.route('/stats/usage_mental_health', methods=['GET', 'OPTIONS'])
-@limiter.limit("20 per minute")
-def get_usage_mental_health():
-    logger.info(f"Solicitud recibida: {request.method} {request.path} from {request.remote_addr} con User-Agent: {request.headers.get('User-Agent')}")
-    if request.method == 'OPTIONS':
-        return '', 200
-    result = get_usage_mental_health_correlation()
     return jsonify(result)
 
 if __name__ == '__main__':
