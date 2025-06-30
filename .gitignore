@@ -18,3 +18,5 @@ Thumbs.db
 # Archivos de configuración del IDE
 .idea/
 *.code-workspace
+
+.env
