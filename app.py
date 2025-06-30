@@ -61,7 +61,7 @@ def get_students():
                    social_network_id, affects_academic_performance, sleep_hours_per_night,
                    mental_health_score, relationship_status_id, conflicts_over_social_media,
                    addicted_score
-            FROM Tbl_Students_Model
+            FROM Tbl_Students_Model WHERE history_models_import_id = 1
         """)
         students = cursor.fetchall()
         conn.close()
