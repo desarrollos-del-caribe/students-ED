@@ -8,7 +8,13 @@ from services.analysis_model import (
 from config import Config
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["500 per day", "100 per hour"],
+    storage_uri="memory://"
+)
 
 @app.route('/')
 def home():
@@ -114,4 +120,4 @@ def predict_sleep_route(history_model):
     return jsonify({"predicted_sleep_hours": result})
 
 if __name__ == '__main__':
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    app.run(host='*', port=5000, debug=False)
