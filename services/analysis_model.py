@@ -8,17 +8,33 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def load_data():
-    """Carga datos de Tbl_Students_Model."""
+# def load_dataDefault():
+#     try:
+#         conn = Config.get_connection()
+#         query = """
+#         SELECT FROM * Tbl_Students_Model
+        
+#         "
+        
+
+def load_data(historyModel=None):
+    """Carga datos de Tbl_Students_Model, filtrando por ID si se proporciona."""
     try:
         conn = Config.get_connection()
-        query = """
-            SELECT id, age, gender_id, academic_level_id, country_id, avg_daily_used_hours,
-                   social_network_id, affects_academic_performance, sleep_hours_per_night,
-                   mental_health_score, relationship_status_id, conflicts_over_social_media,
-                   addicted_score
-            FROM Tbl_Students_Model  WHERE history_models_import_id = 1
-        """
+
+        if historyModel is not None:
+            query = f"""
+                SELECT *
+                FROM Tbl_Students_Model
+                WHERE history_models_import = 1 AND id_history_model = {historyModel}
+            """
+        else:
+            query = """
+                SELECT *
+                FROM Tbl_Students_Model
+                WHERE history_models_import = 1
+            """
+
         df = pd.read_sql_query(query, conn)
         conn.close()
         return df
@@ -26,23 +42,11 @@ def load_data():
         logger.error(f"Error cargando datos: {str(e)}")
         return pd.DataFrame()
 
-def clean_data(df):
-    """Limpia datos, reemplazando valores nulos."""
-    df = df.fillna({
-        'age': 0,
-        'avg_daily_used_hours': 0,
-        'sleep_hours_per_night': 0,
-        'mental_health_score': 0,
-        'conflicts_over_social_media': 0,
-        'addicted_score': 0,
-        'affects_academic_performance': 0
-    })
-    return df
 
-def social_media_addiction_risk(usage_hours, addicted_score, mental_health_score, conflicts_score):
+def social_media_addiction_risk(usage_hours, addicted_score, mental_health_score, conflicts_score, historyModel=None):
     """Predice riesgo de adicción usando DecisionTreeClassifier."""
     try:
-        df = load_data()
+        df = load_data(historyModel)
         df = clean_data(df)
 
         required_cols = ['avg_daily_used_hours', 'addicted_score', 'mental_health_score', 'conflicts_over_social_media']
@@ -78,10 +82,10 @@ def social_media_addiction_risk(usage_hours, addicted_score, mental_health_score
         logger.error(f"Error en social_media_addiction_risk: {str(e)}")
         return "Bajo"
 
-def sleep_prediction(usage_hours, age, mental_health_score):
+def sleep_prediction(usage_hours, age, mental_health_score, historyModel=None):
     """Predice horas de sueño usando LinearRegression."""
     try:
-        df = load_data()
+        df = load_data(historyModel)
         df = clean_data(df)
 
         features = ['age', 'avg_daily_used_hours', 'mental_health_score', 'sleep_hours_per_night']
@@ -107,10 +111,10 @@ def sleep_prediction(usage_hours, age, mental_health_score):
         logger.error(f"Error en sleep_prediction: {str(e)}")
         return 0
 
-def academic_performance_risk(usage_hours, sleep_hours, mental_health_score):
+def academic_performance_risk(usage_hours, sleep_hours, mental_health_score, historyModel=None):
     """Predice riesgo académico usando LogisticRegression."""
     try:
-        df = load_data()
+        df = load_data(historyModel)
         df = clean_data(df)
 
         required_cols = ['avg_daily_used_hours', 'sleep_hours_per_night', 'mental_health_score', 'affects_academic_performance']
@@ -137,10 +141,10 @@ def academic_performance_risk(usage_hours, sleep_hours, mental_health_score):
         logger.error(f"Error en academic_performance_risk: {str(e)}")
         return {"risk": "Bajo", "probability": 0}
 
-def get_platform_distribution():
+def get_platform_distribution(historyModel=None):
     """Obtiene distribución de plataformas."""
     try:
-        df = load_data()
+        df = load_data(historyModel)
         df = clean_data(df)
 
         if 'social_network_id' not in df.columns:
