@@ -8,43 +8,52 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# def load_dataDefault():
-#     try:
-#         conn = Config.get_connection()
-#         query = """
-#         SELECT FROM * Tbl_Students_Model
-        
-#         "
-        
+def clean_data(df):
+    """Limpia los datos manejando valores nulos y tipos de datos."""
+    df = df.copy()
+    numeric_cols = ['avg_daily_used_hours', 'addicted_score', 'mental_health_score', 
+                    'conflicts_over_social_media', 'sleep_hours_per_night', 'age']
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+            mean_value = df[col].mean() if not df[col].isna().all() else 0
+            df[col] = df[col].fillna(mean_value)
+    return df
 
 def load_data(historyModel=None):
-    """Carga datos de Tbl_Students_Model, filtrando por ID si se proporciona."""
+    """Carga datos de Tbl_Students_Model con unión a Tbl_Countries."""
     try:
         conn = Config.get_connection()
-
+        if conn is None:
+            raise Exception("No se pudo establecer la conexión a la base de datos")
+        
         if historyModel is not None:
-            query = f"""
-                SELECT *
-                FROM Tbl_Students_Model
-                WHERE history_models_import = 1 AND id_history_model = {historyModel}
+            query = """
+                SELECT s.*, c.name_country AS country
+                FROM Tbl_Students_Model s
+                LEFT JOIN Tbl_Countries c ON s.country_id = c.id
+                WHERE s.history_models_import_id = %s
             """
+            params = (historyModel,)
         else:
             query = """
-                SELECT *
-                FROM Tbl_Students_Model
-                WHERE history_models_import = 1
+                SELECT s.*, c.name_country AS country
+                FROM Tbl_Students_Model s
+                LEFT JOIN Tbl_Countries c ON s.country_id = c.id
             """
+            params = ()
 
-        df = pd.read_sql_query(query, conn)
+        df = pd.read_sql_query(query, conn, params=params)
         conn.close()
         return df
     except Exception as e:
         logger.error(f"Error cargando datos: {str(e)}")
+        if 'conn' in locals() and conn is not None:
+            conn.close()
         return pd.DataFrame()
 
-
 def social_media_addiction_risk(usage_hours, addicted_score, mental_health_score, conflicts_score, historyModel=None):
-    """Predice riesgo de adicción usando DecisionTreeClassifier."""
+    """Predice riesgo de adicción usando DecisionTreeClassifier basado en el historial."""
     try:
         df = load_data(historyModel)
         df = clean_data(df)
@@ -82,37 +91,8 @@ def social_media_addiction_risk(usage_hours, addicted_score, mental_health_score
         logger.error(f"Error en social_media_addiction_risk: {str(e)}")
         return "Bajo"
 
-def sleep_prediction(usage_hours, age, mental_health_score, historyModel=None):
-    """Predice horas de sueño usando LinearRegression."""
-    try:
-        df = load_data(historyModel)
-        df = clean_data(df)
-
-        features = ['age', 'avg_daily_used_hours', 'mental_health_score', 'sleep_hours_per_night']
-        if not all(col in df.columns for col in features):
-            logger.error("Columnas necesarias no encontradas")
-            return 0
-
-        X = df[['age', 'avg_daily_used_hours', 'mental_health_score']]
-        y = df['sleep_hours_per_night']
-
-        model = LinearRegression()
-        model.fit(X, y)
-
-        entrada = pd.DataFrame([{
-            'age': age,
-            'avg_daily_used_hours': usage_hours,
-            'mental_health_score': mental_health_score
-        }])
-
-        pred = model.predict(entrada)[0]
-        return round(pred, 2)
-    except Exception as e:
-        logger.error(f"Error en sleep_prediction: {str(e)}")
-        return 0
-
 def academic_performance_risk(usage_hours, sleep_hours, mental_health_score, historyModel=None):
-    """Predice riesgo académico usando LogisticRegression."""
+    """Predice riesgo académico usando LogisticRegression basado en el historial."""
     try:
         df = load_data(historyModel)
         df = clean_data(df)
@@ -120,7 +100,7 @@ def academic_performance_risk(usage_hours, sleep_hours, mental_health_score, his
         required_cols = ['avg_daily_used_hours', 'sleep_hours_per_night', 'mental_health_score', 'affects_academic_performance']
         if not all(col in df.columns for col in required_cols):
             logger.error("Columnas requeridas no encontradas")
-            return "Bajo"
+            return {"risk": "Bajo", "probability": 0}
 
         X = df[['avg_daily_used_hours', 'sleep_hours_per_night', 'mental_health_score']]
         y = df['affects_academic_performance']
@@ -141,27 +121,68 @@ def academic_performance_risk(usage_hours, sleep_hours, mental_health_score, his
         logger.error(f"Error en academic_performance_risk: {str(e)}")
         return {"risk": "Bajo", "probability": 0}
 
-def get_platform_distribution(historyModel=None):
-    """Obtiene distribución de plataformas."""
+def student_performance_prediction(student_id, historyModel=None):
+    """Predice el rendimiento académico y riesgo de adicción para un estudiante específico."""
     try:
         df = load_data(historyModel)
         df = clean_data(df)
 
-        if 'social_network_id' not in df.columns:
-            logger.error("Columna 'social_network_id' no encontrada")
-            return {"labels": ["Plataforma 1", "Plataforma 2", "Plataforma 3", "Plataforma 4"], "data": [1, 1, 1, 1]}
-
-        conn = Config.get_connection()
-        cursor = conn.cursor(as_dict=True)
-        cursor.execute("SELECT id, name FROM Tbl_Social_Network")
-        platform_map = {row['id']: row['name'] for row in cursor.fetchall()}
-        conn.close()
-
-        platform_counts = df['social_network_id'].value_counts(normalize=True) * 100
-        labels = [platform_map.get(id, f"Plataforma {id}") for id in platform_counts.index]
-        data = platform_counts.values.tolist()
-
-        return {"labels": labels, "data": [round(x, 2) for x in data]}
+        if 'id' not in df.columns:
+            logger.error("Columna 'id' no encontrada")
+            return {"error": "Columna 'id' no encontrada"}
+        
+        student_data = df[df['id'] == student_id]
+        if student_data.empty:
+            logger.error(f"Estudiante con ID {student_id} no encontrado")
+            return {"error": f"Estudiante con ID {student_id} no encontrado"}
+        
+        required_cols = ['avg_daily_used_hours', 'addicted_score', 'mental_health_score', 
+                        'conflicts_over_social_media', 'sleep_hours_per_night']
+        if not all(col in df.columns for col in required_cols):
+            logger.error("Columnas requeridas no encontradas")
+            return {"error": "Columnas requeridas no encontradas"}
+        
+        addiction_pred = social_media_addiction_risk(
+            student_data['avg_daily_used_hours'].iloc[0],
+            student_data['addicted_score'].iloc[0],
+            student_data['mental_health_score'].iloc[0],
+            student_data['conflicts_over_social_media'].iloc[0],
+            historyModel
+        )
+        academic_pred = academic_performance_risk(
+            student_data['avg_daily_used_hours'].iloc[0],
+            student_data['sleep_hours_per_night'].iloc[0],
+            student_data['mental_health_score'].iloc[0],
+            historyModel
+        )
+        
+        # Comparación con el promedio del historial
+        avg_addicted_score = df['addicted_score'].mean() if not df['addicted_score'].isna().all() else 0
+        avg_academic_risk = df['affects_academic_performance'].mean() if not df['affects_academic_performance'].isna().all() else 0
+        return {
+            "id": student_id,
+            "addiction_risk": addiction_pred,
+            "addiction_score_vs_avg": round(student_data['addicted_score'].iloc[0] - avg_addicted_score, 2),
+            "academic_risk": academic_pred['risk'],
+            "academic_risk_probability": academic_pred['probability'],
+            "academic_risk_vs_avg": round(student_data['affects_academic_performance'].iloc[0] - avg_academic_risk, 2) if 'affects_academic_performance' in student_data.columns else 0
+        }
     except Exception as e:
-        logger.error(f"Error en get_platform_distribution: {str(e)}")
-        return {"labels": ["Plataforma 1", "Plataforma 2", "Plataforma 3", "Plataforma 4"], "data": [1, 1, 1, 1]}
+        logger.error(f"Error en student_performance_prediction: {str(e)}")
+        return {"error": str(e)}
+
+def addiction_by_country(historyModel=None):
+    """Calcula el riesgo promedio de adicción por país basado en el historial."""
+    try:
+        df = load_data(historyModel)
+        df = clean_data(df)
+
+        if 'country' not in df.columns or 'addicted_score' not in df.columns:
+            logger.error("Columnas 'country' o 'addicted_score' no encontradas")
+            return {"error": "Columnas requeridas no encontradas"}
+
+        country_risk = df.groupby('country')['addicted_score'].mean().to_dict()
+        return {country: round(score, 2) for country, score in country_risk.items()}
+    except Exception as e:
+        logger.error(f"Error en addiction_by_country: {str(e)}")
+        return {"error": str(e)}
