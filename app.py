@@ -18,7 +18,7 @@ limiter = Limiter(
     storage_uri="memory://"
 )
 
-@app.route('/')
+@app.route('/api')
 def home():
     return jsonify({"message": "API funcionando correctamente"})
 
