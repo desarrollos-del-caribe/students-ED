@@ -10,7 +10,14 @@ from services.analysis_model import (
 from config import Config
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app, resources={
+    r"/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "Access-Control-Allow-Credentials"],
+        "supports_credentials": True
+    }
+})
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
@@ -22,6 +29,14 @@ limiter = Limiter(
 def home():
     return jsonify({"message": "API funcionando correctamente"})
 
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        response = jsonify()
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        response.headers.add('Access-Control-Allow-Headers', "*")
+        response.headers.add('Access-Control-Allow-Methods', "*")
+        return response
 
 @app.route('/students/<history_model>', methods=['GET'])
 def get_students(history_model):
@@ -132,4 +147,4 @@ def country_addiction():
         return jsonify({"error": f"Error al calcular adicción por país: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    app.run(host='*', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=5000, debug=False)
