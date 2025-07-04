@@ -61,7 +61,7 @@ def social_media_addiction_risk(usage_hours, addicted_score, mental_health_score
         required_cols = ['avg_daily_used_hours', 'addicted_score', 'mental_health_score', 'conflicts_over_social_media']
         if not all(col in df.columns for col in required_cols):
             logger.error("Columnas requeridas no encontradas")
-            return "Bajo"
+            return {"risk": "Bajo", "probabilities": {"Bajo": 1.0, "Medio": 0.0, "Alto": 0.0}, "dataset_stats": {}}
 
         def clasificar_riesgo(row):
             if row['avg_daily_used_hours'] > 5 and row['addicted_score'] >= 7 and row['conflicts_over_social_media'] >= 2:
@@ -86,10 +86,24 @@ def social_media_addiction_risk(usage_hours, addicted_score, mental_health_score
         }])
 
         pred = model.predict(entrada)[0]
-        return pred
+        probs = model.predict_proba(entrada)[0]
+        classes = model.classes_
+        probabilities = {cls: round(float(prob), 4) for cls, prob in zip(classes, probs)}
+
+        dataset_stats = {
+            "avg_usage_hours": round(float(df['avg_daily_used_hours'].mean()), 2),
+            "avg_addicted_score": round(float(df['addicted_score'].mean()), 2),
+            "avg_mental_health_score": round(float(df['mental_health_score'].mean()), 2),
+            "avg_conflicts_score": round(float(df['conflicts_over_social_media'].mean()), 2)
+        }
+        return {
+            "risk": pred,
+            "probabilities": probabilities,
+            "dataset_stats": dataset_stats
+        }
     except Exception as e:
         logger.error(f"Error en social_media_addiction_risk: {str(e)}")
-        return "Bajo"
+        return {"risk": "Bajo", "probabilities": {"Bajo": 1.0, "Medio": 0.0, "Alto": 0.0}, "dataset_stats": {}}
 
 def academic_performance_risk(usage_hours, sleep_hours, mental_health_score, historyModel=None):
     """Predice riesgo académico usando LogisticRegression basado en el historial."""
@@ -100,7 +114,7 @@ def academic_performance_risk(usage_hours, sleep_hours, mental_health_score, his
         required_cols = ['avg_daily_used_hours', 'sleep_hours_per_night', 'mental_health_score', 'affects_academic_performance']
         if not all(col in df.columns for col in required_cols):
             logger.error("Columnas requeridas no encontradas")
-            return {"risk": "Bajo", "probability": 0}
+            return {"risk": "Bajo", "probability": 0, "dataset_stats": {}}
 
         X = df[['avg_daily_used_hours', 'sleep_hours_per_night', 'mental_health_score']]
         y = df['affects_academic_performance']
@@ -116,10 +130,21 @@ def academic_performance_risk(usage_hours, sleep_hours, mental_health_score, his
 
         prob = model.predict_proba(entrada)[0][1]
         pred = model.predict(entrada)[0]
-        return {"risk": "Alto" if pred == 1 else "Bajo", "probability": round(prob, 4)}
+
+        dataset_stats = {
+            "avg_usage_hours": round(float(df['avg_daily_used_hours'].mean()), 2),
+            "avg_sleep_hours": round(float(df['sleep_hours_per_night'].mean()), 2),
+            "avg_mental_health_score": round(float(df['mental_health_score'].mean()), 2),
+            "avg_academic_impact": round(float(df['affects_academic_performance'].mean()), 2)
+        }
+        return {
+            "risk": "Alto" if pred == 1 else "Bajo",
+            "probability": round(prob, 4),
+            "dataset_stats": dataset_stats
+        }
     except Exception as e:
         logger.error(f"Error en academic_performance_risk: {str(e)}")
-        return {"risk": "Bajo", "probability": 0}
+        return {"risk": "Bajo", "probability": 0, "dataset_stats": {}}
 
 def student_performance_prediction(student_id, historyModel=None):
     """Predice el rendimiento académico y riesgo de adicción para un estudiante específico."""
@@ -155,34 +180,74 @@ def student_performance_prediction(student_id, historyModel=None):
             student_data['mental_health_score'].iloc[0],
             historyModel
         )
+        dataset_stats = {
+            "avg_addicted_score": round(float(df['addicted_score'].mean()), 2),
+            "avg_academic_impact": round(float(df['affects_academic_performance'].mean()), 2),
+            "student_addicted_score": round(float(student_data['addicted_score'].iloc[0]), 2),
+            "student_academic_impact": round(float(student_data['affects_academic_performance'].iloc[0]), 2) if 'affects_academic_performance' in student_data.columns else 0
+        }
         
-        # Comparación con el promedio del historial
-        avg_addicted_score = df['addicted_score'].mean() if not df['addicted_score'].isna().all() else 0
-        avg_academic_risk = df['affects_academic_performance'].mean() if not df['affects_academic_performance'].isna().all() else 0
         return {
             "id": student_id,
-            "addiction_risk": addiction_pred,
-            "addiction_score_vs_avg": round(student_data['addicted_score'].iloc[0] - avg_addicted_score, 2),
-            "academic_risk": academic_pred['risk'],
-            "academic_risk_probability": academic_pred['probability'],
-            "academic_risk_vs_avg": round(student_data['affects_academic_performance'].iloc[0] - avg_academic_risk, 2) if 'affects_academic_performance' in student_data.columns else 0
+            "addiction_risk": addiction_pred["risk"],
+            "addiction_probabilities": addiction_pred["probabilities"],
+            "academic_risk": academic_pred["risk"],
+            "academic_risk_probability": academic_pred["probability"],
+            "dataset_stats": dataset_stats
         }
     except Exception as e:
         logger.error(f"Error en student_performance_prediction: {str(e)}")
         return {"error": str(e)}
 
-def addiction_by_country(historyModel=None):
+def addiction_by_country(historyModel=None, min_students=5):
     """Calcula el riesgo promedio de adicción por país basado en el historial."""
     try:
         df = load_data(historyModel)
         df = clean_data(df)
 
+        if df.empty:
+            logger.error("No se encontraron datos para el historial especificado")
+            return {"error": "No se encontraron datos para el historial especificado"}
+
         if 'country' not in df.columns or 'addicted_score' not in df.columns:
             logger.error("Columnas 'country' o 'addicted_score' no encontradas")
             return {"error": "Columnas requeridas no encontradas"}
+        
+        # Calcular promedio y conteo por país
+        country_stats = df.groupby('country').agg({
+            'addicted_score': ['mean', 'count'],
+            'avg_daily_used_hours': 'mean'
+        }).reset_index()
+        
+        country_stats.columns = ['country', 'addicted_score_mean', 'addicted_score_count', 'avg_daily_used_hours_mean']
+        
+        # Filtrar países con menos de min_students
+        country_stats = country_stats[country_stats['addicted_score_count'] >= min_students]
+        
+        result = {
+            "countries": [],
+            "avg_addicted_scores": [],
+            "student_counts": [],
+            "avg_usage_hours": []
+        }
+        
+        for _, row in country_stats.iterrows():
+            result["countries"].append(row['country'])
+            result["avg_addicted_scores"].append(round(float(row['addicted_score_mean']), 2))
+            result["student_counts"].append(int(row['addicted_score_count']))
+            result["avg_usage_hours"].append(round(float(row['avg_daily_used_hours_mean']), 2))
 
-        country_risk = df.groupby('country')['addicted_score'].mean().to_dict()
-        return {country: round(score, 2) for country, score in country_risk.items()}
+        # Estadísticas generales
+        dataset_stats = {
+            "total_students": len(df),
+            "avg_addicted_score": round(float(df['addicted_score'].mean()), 2) if not df['addicted_score'].isna().all() else 0,
+            "avg_usage_hours": round(float(df['avg_daily_used_hours'].mean()), 2) if not df['avg_daily_used_hours'].isna().all() else 0
+        }
+
+        return {
+            "country_data": result,
+            "dataset_stats": dataset_stats
+        }
     except Exception as e:
         logger.error(f"Error en addiction_by_country: {str(e)}")
         return {"error": str(e)}
