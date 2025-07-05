@@ -1,0 +1,22 @@
+# Entorno virtual
+venv/
+*/Lib/site-packages/
+*/lib/python*/site-packages/
+
+# Archivos temporales de Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+static/
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de configuración del IDE
+.idea/
+*.code-workspace
+
+.env
