@@ -5,9 +5,46 @@ import json
 from typing import Dict, Any, List
 import logging
 
+import os
+import time
+import matplotlib.pyplot as plt
+
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+GRAPH_DIR = os.path.join(os.path.dirname(__file__), '../static/graphs')
+
+def save_plot_image_with_timestamp(name_prefix):
+    """
+    Guarda el gráfico actual como imagen con nombre único basado en timestamp.
+    """
+    timestamp = int(time.time())
+    filename = f"{name_prefix}_{timestamp}.png"
+    filepath = os.path.join(GRAPH_DIR, filename)
+    plt.savefig(filepath)
+    plt.close()
+    return f"/static/graphs/{filename}"
+
+#Eliminar PNGs de graficas de 5 min de antiguedad
+def clean_old_graphs(directory, max_age_seconds=300):
+    """
+    Elimina archivos PNG en la carpeta que sean más viejos que max_age_seconds (default: 5 minutos).
+    """
+    now = time.time()
+    deleted = []
+
+    for filename in os.listdir(directory):
+        filepath = os.path.join(directory, filename)
+
+        # Solo archivos .png
+        if filename.endswith(".png"):
+            file_age = now - os.path.getmtime(filepath)
+            if file_age > max_age_seconds:
+                os.remove(filepath)
+                deleted.append(filename)
+
+    return deleted
 
 def setup_logging(log_file: str = "app.log"):
     """Configurar logging para la aplicación"""

@@ -3,12 +3,11 @@ from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Importar rutas nuevas
-from routes.users import users_bp
-from routes.models import models_bp
 from routes.analysis import analysis_bp
-from routes.visualizations import visualizations_bp
 
 # Crear la aplicación Flask
 app = Flask(__name__)
@@ -32,10 +31,7 @@ limiter = Limiter(
 )
 
 # Registrar blueprints
-app.register_blueprint(users_bp)
-app.register_blueprint(models_bp)
 app.register_blueprint(analysis_bp)
-app.register_blueprint(visualizations_bp)
 
 # Crear directorios necesarios al iniciar
 def ensure_directories():
@@ -99,11 +95,7 @@ def not_found(error):
         'message': 'La ruta solicitada no existe',
         'available_endpoints': [
             '/api',
-            '/api/users',
-            '/api/models',
-            '/api/analyze',
-            '/api/predictions',
-            '/api/visualizations'
+            '/api/models'
         ]
     }), 404
 
@@ -129,10 +121,6 @@ if __name__ == '__main__':
     print("   - Local: http://localhost:5000")
     print("   - API: http://localhost:5000/api")
     print("📋 Endpoints principales:")
-    print("   - GET /api/users - Gestión de usuarios")
     print("   - GET /api/models - Modelos ML disponibles")
-    print("   - POST /api/analyze/user/{id} - Análisis completo")
-    print("   - GET /api/predictions/{user_id} - Predicciones")
-    print("   - GET /api/visualizations/dashboard - Dashboard completo")
     
     app.run(host='0.0.0.0', port=5000, debug=True)

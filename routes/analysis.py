@@ -1,434 +1,179 @@
 from flask import Blueprint, request, jsonify
-from services.ml_service import MLService
-from utils.excel_utils import UsersExcelHandler, PredictionsExcelHandler
-import traceback
+from services.analysis_model import predict_mental_health_score, predict_sleep_hours, academic_performance_risk, student_performance_prediction, addiction_by_country, social_media_addiction_risk, visualize_decision_tree, run_kmeans_clustering
 
-analysis_bp = Blueprint('analysis', __name__, url_prefix='/api')
+analysis_bp = Blueprint('analysis', __name__, url_prefix='/api/models')
 
-# Inicializar servicios
-ml_service = MLService()
-users_handler = UsersExcelHandler()
-predictions_handler = PredictionsExcelHandler()
-
-@analysis_bp.route('/analyze/user/<int:user_id>', methods=['POST'])
-def analyze_user(user_id):
-    """Análisis completo de usuario con todos los modelos disponibles"""
+@analysis_bp.route('/mental-health', methods=['POST'])
+def predict_mental_health():
+    """
+    Endpoint para predecir el Mental_Health_Score de un usuario según sus hábitos.
+    """
     try:
-        # Verificar que el usuario existe
-        try:
-            user = users_handler.get_user_by_id(user_id)
-        except ValueError:
-            return jsonify({'error': f'Usuario con ID {user_id} no encontrado'}), 404
-        
-        # Ejecutar análisis completo
-        analysis_results = ml_service.compare_models(user_id)
-        
-        # Ejecutar modelos individuales para obtener resultados detallados
-        individual_results = {}
-        
-        try:
-            # Regresión Lineal (modelo 1)
-            linear_result = ml_service.linear_regression_analysis(user_id)
-            individual_results['linear_regression'] = linear_result.to_dict()
-        except Exception as e:
-            individual_results['linear_regression'] = {'error': str(e)}
-        
-        try:
-            # Regresión Logística (modelo 2)
-            logistic_result = ml_service.logistic_regression_analysis(user_id)
-            individual_results['logistic_regression'] = logistic_result.to_dict()
-        except Exception as e:
-            individual_results['logistic_regression'] = {'error': str(e)}
-        
-        try:
-            # K-Means Clustering (modelo 3)
-            kmeans_result = ml_service.kmeans_clustering_analysis(user_id)
-            individual_results['kmeans_clustering'] = kmeans_result.to_dict()
-        except Exception as e:
-            individual_results['kmeans_clustering'] = {'error': str(e)}
-        
-        try:
-            # Random Forest (modelo 4)
-            rf_result = ml_service.random_forest_analysis(user_id)
-            individual_results['random_forest'] = rf_result.to_dict()
-        except Exception as e:
-            individual_results['random_forest'] = {'error': str(e)}
-        
-        try:
-            # Árboles de Decisión (modelo 5)
-            dt_result = ml_service.decision_tree_analysis(user_id)
-            individual_results['decision_tree'] = dt_result.to_dict()
-        except Exception as e:
-            individual_results['decision_tree'] = {'error': str(e)}
-        
-        try:
-            # Support Vector Machine (modelo 6)
-            svm_result = ml_service.svm_analysis(user_id)
-            individual_results['support_vector_machine'] = svm_result.to_dict()
-        except Exception as e:
-            individual_results['support_vector_machine'] = {'error': str(e)}
-        
-        # Compilar resultado final
-        final_result = {
-            'user_info': user,
-            'comprehensive_analysis': analysis_results.to_dict(),
-            'individual_models': individual_results,
-            'summary': {
-                'total_models_executed': len([r for r in individual_results.values() if 'error' not in r]),
-                'models_with_errors': len([r for r in individual_results.values() if 'error' in r]),
-                'analysis_timestamp': individual_results.get('linear_regression', {}).get('timestamp', ''),
-                'risk_assessment': analysis_results.user_profile.risk_level if analysis_results.user_profile else 'No evaluado',
-                'academic_prediction': analysis_results.user_profile.academic_prediction if analysis_results.user_profile else 0
-            }
-        }
-        
-        return jsonify(final_result), 200
-        
+        data = request.get_json()
+
+        # Validar campos requeridos
+        required_fields = ["usage_hours", "sleep_hours", "addicted_score", "conflicts_score", "academic_impact"]
+        if not all(field in data for field in required_fields):
+            return jsonify({"error": "Faltan campos requeridos en la solicitud."}), 400
+
+        prediction = predict_mental_health_score(
+            usage_hours=data["usage_hours"],
+            sleep_hours=data["sleep_hours"],
+            addicted_score=data["addicted_score"],
+            conflicts_score=data["conflicts_score"],
+            academic_impact=data["academic_impact"]
+        )
+
+        return jsonify(prediction), 200
+
     except Exception as e:
-        print(f"Error en análisis completo: {str(e)}")
-        print(traceback.format_exc())
-        return jsonify({'error': f'Error en análisis completo: {str(e)}'}), 500
+        print(f"Error en /predict/mental-health: {str(e)}")
+        return jsonify({"error": f"Error al predecir salud mental: {str(e)}"}), 500
 
-
-@analysis_bp.route('/predictions/<int:user_id>', methods=['GET'])
-def get_user_predictions(user_id):
-    """Obtener todas las predicciones de un usuario"""
+@analysis_bp.route('/sleep-prediction', methods=['POST'])
+def predict_sleep():
+    """
+    Predice las horas de sueño estimadas según el uso diario de redes sociales.
+    """
     try:
-        # Verificar que el usuario existe
-        try:
-            user = users_handler.get_user_by_id(user_id)
-        except ValueError:
-            return jsonify({'error': f'Usuario con ID {user_id} no encontrado'}), 404
-        
-        # Obtener predicciones desde Excel
-        predictions = predictions_handler.get_user_predictions(user_id)
-        
-        if not predictions:
-            return jsonify({
-                'user_id': user_id,
-                'user_name': user['name'],
-                'predictions': [],
-                'total_predictions': 0,
-                'message': 'No se encontraron predicciones para este usuario'
-            }), 200
-        
-        # Enriquecer predicciones con información del modelo
-        from utils.excel_utils import ModelsExcelHandler
-        models_handler = ModelsExcelHandler()
-        
-        enriched_predictions = []
-        for prediction in predictions:
-            try:
-                model = models_handler.get_model_by_id(prediction['model_id'])
-                enriched_prediction = {
-                    **prediction,
-                    'model_name': model['name'],
-                    'model_category': model['category'],
-                    'model_difficulty': model['difficulty']
-                }
-                enriched_predictions.append(enriched_prediction)
-            except:
-                enriched_predictions.append(prediction)
-        
-        # Agrupar por modelo
-        predictions_by_model = {}
-        for pred in enriched_predictions:
-            model_id = pred['model_id']
-            if model_id not in predictions_by_model:
-                predictions_by_model[model_id] = {
-                    'model_id': model_id,
-                    'model_name': pred.get('model_name', f'Modelo {model_id}'),
-                    'predictions': []
-                }
-            predictions_by_model[model_id]['predictions'].append(pred)
-        
-        return jsonify({
-            'user_id': user_id,
-            'user_name': user['name'],
-            'predictions': enriched_predictions,
-            'predictions_by_model': list(predictions_by_model.values()),
-            'total_predictions': len(predictions),
-            'models_used': len(predictions_by_model),
-            'latest_prediction': max(enriched_predictions, key=lambda x: x['created_at']) if enriched_predictions else None
-        }), 200
-        
+        data = request.get_json()
+        if "usage_hours" not in data:
+            return jsonify({"error": "El campo 'usage_hours' es obligatorio"}), 400
+
+        result = predict_sleep_hours(data["usage_hours"])
+        return jsonify(result), 200
+
     except Exception as e:
-        print(f"Error obteniendo predicciones: {str(e)}")
-        return jsonify({'error': 'Error interno del servidor'}), 500
+        print(f"Error en /sleep-prediction: {str(e)}")
+        return jsonify({"error": "Error al predecir horas de sueño"}), 500
 
-
-@analysis_bp.route('/predictions/all', methods=['GET'])
-def get_all_predictions():
-    """Obtener todas las predicciones con filtros opcionales"""
+@analysis_bp.route('/academic-impact', methods=['POST'])
+def predict_academic_impact_endpoint():
+    """
+    Endpoint para predecir si el uso de redes sociales afecta el rendimiento académico.
+    """
     try:
-        # Parámetros de filtro
-        model_id = request.args.get('model_id', type=int)
-        user_id = request.args.get('user_id', type=int)
-        limit = request.args.get('limit', default=100, type=int)
-        
-        try:
-            df = predictions_handler.read_excel_data(predictions_handler.FILENAME)
-        except:
-            return jsonify({
-                'predictions': [],
-                'total': 0,
-                'message': 'No hay predicciones registradas'
-            }), 200
-        
-        # Aplicar filtros
-        if model_id:
-            df = df[df['model_id'] == model_id]
-        
-        if user_id:
-            df = df[df['user_id'] == user_id]
-        
-        # Limitar resultados
-        df = df.tail(limit)
-        
-        predictions = df.to_dict('records')
-        
-        # Enriquecer con información adicional
-        from utils.excel_utils import ModelsExcelHandler
-        models_handler = ModelsExcelHandler()
-        
-        enriched_predictions = []
-        for prediction in predictions:
-            try:
-                model = models_handler.get_model_by_id(prediction['model_id'])
-                user = users_handler.get_user_by_id(prediction['user_id'])
-                
-                enriched_prediction = {
-                    **prediction,
-                    'model_name': model['name'],
-                    'user_name': user['name']
-                }
-                enriched_predictions.append(enriched_prediction)
-            except:
-                enriched_predictions.append(prediction)
-        
-        return jsonify({
-            'predictions': enriched_predictions,
-            'total': len(enriched_predictions),
-            'filters': {
-                'model_id': model_id,
-                'user_id': user_id,
-                'limit': limit
-            }
-        }), 200
-        
+        data = request.get_json()
+        required = ["usage_hours", "sleep_hours", "mental_health_score"]
+        if not all(k in data for k in required):
+            return jsonify({"error": "Faltan campos requeridos"}), 400
+
+        result = predict_academic_impact(
+            usage_hours=data["usage_hours"],
+            sleep_hours=data["sleep_hours"],
+            mental_health_score=data["mental_health_score"]
+        )
+        return jsonify(result), 200
+
     except Exception as e:
-        print(f"Error obteniendo todas las predicciones: {str(e)}")
-        return jsonify({'error': 'Error interno del servidor'}), 500
+        print(f"Error en /academic-impact: {str(e)}")
+        return jsonify({"error": "Error al predecir impacto académico"}), 500
 
-
-@analysis_bp.route('/recommendations/<int:user_id>', methods=['GET'])
-def get_user_recommendations(user_id):
-    """Obtener recomendaciones personalizadas para un usuario"""
+#Predecir el riesgo de que el rendimiento academico se vea afectado pos: horas de uso, salud mental y horas de sueño
+@analysis_bp.route('/academic-risk', methods=['POST'])
+def predict_academic_risk():
+    """
+    Predice el riesgo académico usando horas de uso, sueño y salud mental.
+    """
     try:
-        # Verificar que el usuario exists
-        try:
-            user = users_handler.get_user_by_id(user_id)
-        except ValueError:
-            return jsonify({'error': f'Usuario con ID {user_id} no encontrado'}), 404
-        
-        # Obtener datos del usuario
-        social_media_usage = user['social_media_usage']
-        academic_performance = user['academic_performance']
-        study_hours = user['study_hours']
-        main_platform = user['main_platform']
-        
-        # Generar recomendaciones basadas en datos
-        recommendations = {
-            'immediate_actions': [],
-            'long_term_strategies': [],
-            'resource_suggestions': []
-        }
-        
-        # Recomendaciones inmediatas
-        if social_media_usage > 7:
-            recommendations['immediate_actions'].extend([
-                'Reducir el tiempo diario en redes sociales',
-                'Establecer horarios específicos para redes sociales',
-                'Usar aplicaciones de control de tiempo de pantalla'
-            ])
-        
-        if study_hours < 20:
-            recommendations['immediate_actions'].extend([
-                'Incrementar las horas de estudio semanales',
-                'Crear un horario de estudio estructurado',
-                'Eliminar distracciones durante el tiempo de estudio'
-            ])
-        
-        if academic_performance < 75:
-            recommendations['immediate_actions'].extend([
-                'Buscar apoyo académico adicional',
-                'Revisar métodos de estudio actuales',
-                'Consultar con profesores sobre áreas de mejora'
-            ])
-        
-        # Estrategias a largo plazo
-        if social_media_usage > 5:
-            recommendations['long_term_strategies'].extend([
-                'Desarrollar hábitos digitales saludables',
-                'Implementar períodos de desconexión digital',
-                'Usar redes sociales de manera productiva'
-            ])
-        
-        recommendations['long_term_strategies'].extend([
-            'Establecer metas académicas claras y medibles',
-            'Desarrollar técnicas de gestión del tiempo',
-            'Crear un equilibrio entre vida digital y académica'
-        ])
-        
-        # Sugerencias de recursos
-        recommendations['resource_suggestions'].extend([
-            'Apps de productividad: Forest, Pomodoro Timer',
-            'Plataformas educativas: Khan Academy, Coursera',
-            'Técnicas de estudio: Método Cornell, Mapas mentales'
-        ])
-        
-        # Recomendaciones específicas por plataforma
-        platform_recommendations = {
-            'Instagram': ['Seguir cuentas educativas', 'Limitar tiempo en Stories'],
-            'TikTok': ['Usar TikTok para contenido educativo', 'Evitar uso durante horas de estudio'],
-            'YouTube': ['Crear listas de reproducción educativas', 'Usar temporizadores'],
-            'LinkedIn': ['Conectar con profesionales del área de estudio', 'Participar en grupos académicos'],
-            'Facebook': ['Unirse a grupos de estudio', 'Limitar notificaciones'],
-            'Twitter': ['Seguir cuentas académicas relevantes', 'Usar listas temáticas']
-        }
-        
-        if main_platform in platform_recommendations:
-            recommendations['resource_suggestions'].extend(platform_recommendations[main_platform])
-        
-        # Análisis de riesgo
-        risk_factors = []
-        if social_media_usage > 6:
-            risk_factors.append('Alto uso de redes sociales')
-        if study_hours < 25:
-            risk_factors.append('Pocas horas de estudio')
-        if academic_performance < 70:
-            risk_factors.append('Rendimiento académico bajo')
-        
-        risk_level = 'Alto' if len(risk_factors) >= 2 else 'Medio' if len(risk_factors) == 1 else 'Bajo'
-        
-        return jsonify({
-            'user_id': user_id,
-            'user_name': user['name'],
-            'risk_assessment': {
-                'risk_level': risk_level,
-                'risk_factors': risk_factors,
-                'protective_factors': [
-                    f'Horas de estudio: {study_hours}',
-                    f'Rendimiento actual: {academic_performance}',
-                    f'Plataforma principal: {main_platform}'
-                ]
-            },
-            'recommendations': recommendations,
-            'personalized_tips': [
-                f'Considera reducir el uso de {main_platform} en {max(0, social_media_usage - 5)} horas',
-                f'Incrementa las horas de estudio en {max(0, 30 - study_hours)} horas semanales',
-                f'Tu rendimiento actual de {academic_performance}% {"necesita mejora" if academic_performance < 75 else "está en buen nivel"}'
-            ]
-        }), 200
-        
+        data = request.get_json()
+        required = ["usage_hours", "sleep_hours", "mental_health_score"]
+        if not all(k in data for k in required):
+            return jsonify({"error": "Faltan campos requeridos"}), 400
+
+        result = academic_performance_risk(
+            usage_hours=data["usage_hours"],
+            sleep_hours=data["sleep_hours"],
+            mental_health_score=data["mental_health_score"]
+        )
+        return jsonify(result), 200
+
     except Exception as e:
-        print(f"Error generando recomendaciones: {str(e)}")
-        return jsonify({'error': 'Error interno del servidor'}), 500
-
-
-@analysis_bp.route('/trends', methods=['GET'])
-def get_analysis_trends():
-    """Obtener tendencias de análisis y predicciones"""
+        print(f"Error en /academic-risk: {str(e)}")
+        return jsonify({"error": "Error al predecir riesgo académico"}), 500
+    
+#Predice el rendimiento del estudiante con base a los modelos de riesgo de adicción y rendimiento   
+@analysis_bp.route('/student-performance/<int:student_id>', methods=['GET'])
+def get_student_performance(student_id):
     try:
-        # Leer datos de usuarios y predicciones
-        users_df = users_handler.read_users()
-        
-        try:
-            predictions_df = predictions_handler.read_excel_data(predictions_handler.FILENAME)
-        except:
-            predictions_df = None
-        
-        trends = {
-            'user_trends': {
-                'total_users': len(users_df),
-                'average_social_media_usage': float(users_df['social_media_usage'].mean()),
-                'average_academic_performance': float(users_df['academic_performance'].mean()),
-                'platform_popularity': users_df['main_platform'].value_counts().to_dict(),
-                'performance_distribution': {
-                    'excellent': len(users_df[users_df['academic_performance'] >= 90]),
-                    'good': len(users_df[(users_df['academic_performance'] >= 75) & (users_df['academic_performance'] < 90)]),
-                    'average': len(users_df[(users_df['academic_performance'] >= 60) & (users_df['academic_performance'] < 75)]),
-                    'poor': len(users_df[users_df['academic_performance'] < 60])
-                }
-            }
-        }
-        
-        if predictions_df is not None and len(predictions_df) > 0:
-            trends['prediction_trends'] = {
-                'total_predictions': len(predictions_df),
-                'models_used': predictions_df['model_id'].value_counts().to_dict(),
-                'users_analyzed': predictions_df['user_id'].nunique(),
-                'average_accuracy': float(predictions_df['accuracy'].mean()) if 'accuracy' in predictions_df.columns else None
-            }
-        else:
-            trends['prediction_trends'] = {
-                'total_predictions': 0,
-                'models_used': {},
-                'users_analyzed': 0,
-                'average_accuracy': None
-            }
-        
-        # Correlaciones
-        correlations = {
-            'social_media_vs_performance': float(users_df['social_media_usage'].corr(users_df['academic_performance'])),
-            'study_hours_vs_performance': float(users_df['study_hours'].corr(users_df['academic_performance'])),
-            'age_vs_social_media': float(users_df['age'].corr(users_df['social_media_usage']))
-        }
-        
-        trends['correlations'] = correlations
-        
-        return jsonify({'trends': trends}), 200
-        
+        result = student_performance_prediction(student_id)
+        return jsonify(result), 200
     except Exception as e:
-        print(f"Error obteniendo tendencias: {str(e)}")
-        return jsonify({'error': 'Error interno del servidor'}), 500
+        return jsonify({"error": f"Error al predecir rendimiento: {str(e)}"}), 500
 
 
-@analysis_bp.route('/export/predictions', methods=['GET'])
-def export_predictions():
-    """Exportar predicciones en formato JSON para backup"""
+#Obtener estadisticas de adicción por país
+@analysis_bp.route('/addiction-by-country', methods=['GET'])
+def get_addiction_by_country():
     try:
-        user_id = request.args.get('user_id', type=int)
-        model_id = request.args.get('model_id', type=int)
-        
-        try:
-            df = predictions_handler.read_excel_data(predictions_handler.FILENAME)
-        except:
-            return jsonify({
-                'predictions': [],
-                'total': 0,
-                'message': 'No hay predicciones para exportar'
-            }), 200
-        
-        # Aplicar filtros si se especifican
-        if user_id:
-            df = df[df['user_id'] == user_id]
-        
-        if model_id:
-            df = df[df['model_id'] == model_id]
-        
-        predictions = df.to_dict('records')
-        
-        return jsonify({
-            'export_timestamp': predictions_handler.read_excel_data(predictions_handler.FILENAME).index.max() if len(df) > 0 else None,
-            'filters_applied': {
-                'user_id': user_id,
-                'model_id': model_id
-            },
-            'total_exported': len(predictions),
-            'predictions': predictions
-        }), 200
-        
+        min_students = int(request.args.get('min_students', 5))
+        result = addiction_by_country(min_students=min_students)
+        return jsonify(result), 200
     except Exception as e:
-        print(f"Error exportando predicciones: {str(e)}")
-        return jsonify({'error': 'Error interno del servidor'}), 500
+        return jsonify({"error": f"Error en adicción por país: {str(e)}"}), 500 
+    
+#Predecir si un estudiante tiene un nivel alto o bajo de riesgo de adiccón
+@analysis_bp.route('/addiction-risk', methods=['POST'])
+def predict_addiction_risk():
+    """
+    Endpoint para predecir el riesgo de adicción a redes sociales.
+    """
+    try:
+        data = request.get_json()
+
+        required_fields = ["usage_hours", "addicted_score", "mental_health_score", "conflicts_score"]
+        if not all(field in data for field in required_fields):
+            return jsonify({"error": "Faltan campos requeridos."}), 400
+
+        result = social_media_addiction_risk(
+            usage_hours=data["usage_hours"],
+            addicted_score=data["addicted_score"],
+            mental_health_score=data["mental_health_score"],
+            conflicts_score=data["conflicts_score"]
+        )
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        print(f"Error en /addiction-risk: {str(e)}")
+        return jsonify({"error": "Error al predecir riesgo de adicción."}), 500    
+    
+#Árbol de decisión
+@analysis_bp.route('/tree-visualization', methods=['GET'])
+def tree_visualization():
+    """
+    Visualiza árbol de decisión para un target (adicción o rendimiento).
+    Parámetro: ?target=Addicted_Score o Affects_Academic_Performance
+    """
+    try:
+        target = request.args.get("target", "Addicted_Score")
+        image_url = visualize_decision_tree(target)
+        return jsonify({"graph_url": image_url}), 200
+    except Exception as e:
+        return jsonify({"error": f"Error generando el árbol: {str(e)}"}), 500
+
+#Clustering
+@analysis_bp.route('/kmeans-clustering', methods=['GET'])
+def kmeans_visualization():
+    """
+    Visualiza agrupación de estudiantes por KMeans.
+    Parámetro opcional: ?clusters=3
+    """
+    try:
+        n_clusters = int(request.args.get("clusters", 3))
+        image_url = run_kmeans_clustering(n_clusters)
+        return jsonify({"graph_url": image_url}), 200
+    except Exception as e:
+        return jsonify({"error": f"Error en clustering: {str(e)}"}), 500
+     
+#Mapa de calor
+@analysis_bp.route('/correlation-heatmap', methods=['GET'])
+def get_correlation_heatmap():
+    """
+    Muestra un mapa de calor de correlación entre variables numéricas.
+    """
+    try:
+        image_url = plot_correlation_heatmap()
+        return jsonify({"graph_url": image_url}), 200
+    except Exception as e:
+        return jsonify({"error": f"Error generando el mapa de calor: {str(e)}"}), 500
