@@ -145,7 +145,7 @@ def train_academic_performance_risk_model(df): #Modelo de regresión logistica
     return model, scaler
 
 
-def train_social_media_addiction_model(df):
+def train_social_media_addiction_model(df): #Random Forest (clasificación)	
     """
     Entrena un modelo para predecir riesgo de adicción a redes sociales.
     """
