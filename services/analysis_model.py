@@ -2,7 +2,7 @@
 
 import pandas as pd
 from .excel_service import load_dataset
-from .ml_service import train_mental_health_model, train_sleep_prediction_model, train_academic_impact_model
+from .ml_service import train_mental_health_model, train_sleep_prediction_model, train_academic_impact_model, train_academic_performance_risk_model, train_social_media_addiction_model
 import logging
 
 logger = logging.getLogger(__name__)
@@ -119,150 +119,166 @@ def predict_academic_impact(usage_hours, sleep_hours, mental_health_score):
             "dataset_stats": {},
             "error": str(e)
         }
+#Predecir el riesgo de que el rendimiento academico se vea afectado pos: horas de uso, salud mental y horas de sueño
+#Regresión logística	
+def academic_performance_risk(usage_hours, sleep_hours, mental_health_score):
+    """
+    Predice el riesgo académico usando un modelo de regresión logística.
+    """
+    try:
+        df = load_dataset()
+        model, scaler = train_academic_performance_risk_model(df)
 
-# def academic_performance_risk(usage_hours, sleep_hours, mental_health_score, historyModel=None):
-#     """Predice riesgo académico usando LogisticRegression basado en el historial."""
-#     try:
-#         df = load_data(historyModel)
-#         df = clean_data(df)
+        input_df = pd.DataFrame([{
+            "Avg_Daily_Usage_Hours": usage_hours,
+            "Sleep_Hours_Per_Night": sleep_hours,
+            "Mental_Health_Score": mental_health_score
+        }])
 
-#         required_cols = ['avg_daily_used_hours', 'sleep_hours_per_night', 'mental_health_score', 'affects_academic_performance']
-#         if not all(col in df.columns for col in required_cols):
-#             logger.error("Columnas requeridas no encontradas")
-#             return {"risk": "Bajo", "probability": 0, "dataset_stats": {}}
+        input_scaled = scaler.transform(input_df)
+        prediction = model.predict(input_scaled)[0]
+        probability = model.predict_proba(input_scaled)[0][1]
 
-#         X = df[['avg_daily_used_hours', 'sleep_hours_per_night', 'mental_health_score']]
-#         y = df['affects_academic_performance']
+        dataset_stats = {
+            "avg_usage_hours": round(float(df["Avg_Daily_Usage_Hours"].mean()), 2),
+            "avg_sleep_hours": round(float(df["Sleep_Hours_Per_Night"].mean()), 2),
+            "avg_mental_health_score": round(float(df["Mental_Health_Score"].mean()), 2),
+            "avg_academic_impact": round(float(df["Affects_Academic_Performance"].mean()), 2)
+        }
 
-#         model = LogisticRegression(max_iter=1000)
-#         model.fit(X, y)
+        return {
+            "risk": "Alto" if prediction == 1 else "Bajo",
+            "probability": round(float(probability), 4),
+            "dataset_stats": dataset_stats
+        }
 
-#         entrada = pd.DataFrame([{
-#             'avg_daily_used_hours': usage_hours,
-#             'sleep_hours_per_night': sleep_hours,
-#             'mental_health_score': mental_health_score
-#         }])
+    except Exception as e:
+        logger.error(f"Error en academic_performance_risk: {str(e)}")
+        return {
+            "risk": "Bajo",
+            "probability": 0,
+            "dataset_stats": {},
+            "error": str(e)
+        }
+ 
+#Usa los mdoelos de social_media_addiction_risk y academic_performance_risk para devolver predicciones  
+def student_performance_prediction(student_id):
+    """Predice el rendimiento académico y riesgo de adicción para un estudiante específico usando el dataset Excel."""
+    try:
+        df = load_dataset()
 
-#         prob = model.predict_proba(entrada)[0][1]
-#         pred = model.predict(entrada)[0]
+        if "Student_ID" not in df.columns:
+            return {"error": "Columna 'Student_ID' no encontrada en el dataset."}
 
-#         dataset_stats = {
-#             "avg_usage_hours": round(float(df['avg_daily_used_hours'].mean()), 2),
-#             "avg_sleep_hours": round(float(df['sleep_hours_per_night'].mean()), 2),
-#             "avg_mental_health_score": round(float(df['mental_health_score'].mean()), 2),
-#             "avg_academic_impact": round(float(df['affects_academic_performance'].mean()), 2)
-#         }
-#         return {
-#             "risk": "Alto" if pred == 1 else "Bajo",
-#             "probability": round(prob, 4),
-#             "dataset_stats": dataset_stats
-#         }
-#     except Exception as e:
-#         logger.error(f"Error en academic_performance_risk: {str(e)}")
-#         return {"risk": "Bajo", "probability": 0, "dataset_stats": {}}
+        student_data = df[df["Student_ID"] == student_id]
+        if student_data.empty:
+            return {"error": f"Estudiante con ID {student_id} no encontrado"}
 
-# def student_performance_prediction(student_id, historyModel=None):
-#     """Predice el rendimiento académico y riesgo de adicción para un estudiante específico."""
-#     try:
-#         df = load_data(historyModel)
-#         df = clean_data(df)
+        # Extraer valores del estudiante
+        usage = student_data["Avg_Daily_Usage_Hours"].iloc[0]
+        addicted_score = student_data["Addicted_Score"].iloc[0]
+        mental_health = student_data["Mental_Health_Score"].iloc[0]
+        conflicts = student_data["Conflicts_Over_Social_Media"].iloc[0]
+        sleep = student_data["Sleep_Hours_Per_Night"].iloc[0]
 
-#         if 'id' not in df.columns:
-#             logger.error("Columna 'id' no encontrada")
-#             return {"error": "Columna 'id' no encontrada"}
-        
-#         student_data = df[df['id'] == student_id]
-#         if student_data.empty:
-#             logger.error(f"Estudiante con ID {student_id} no encontrado")
-#             return {"error": f"Estudiante con ID {student_id} no encontrado"}
-        
-#         required_cols = ['avg_daily_used_hours', 'addicted_score', 'mental_health_score', 
-#                         'conflicts_over_social_media', 'sleep_hours_per_night']
-#         if not all(col in df.columns for col in required_cols):
-#             logger.error("Columnas requeridas no encontradas")
-#             return {"error": "Columnas requeridas no encontradas"}
-        
-#         addiction_pred = social_media_addiction_risk(
-#             student_data['avg_daily_used_hours'].iloc[0],
-#             student_data['addicted_score'].iloc[0],
-#             student_data['mental_health_score'].iloc[0],
-#             student_data['conflicts_over_social_media'].iloc[0],
-#             historyModel
-#         )
-#         academic_pred = academic_performance_risk(
-#             student_data['avg_daily_used_hours'].iloc[0],
-#             student_data['sleep_hours_per_night'].iloc[0],
-#             student_data['mental_health_score'].iloc[0],
-#             historyModel
-#         )
-#         dataset_stats = {
-#             "avg_addicted_score": round(float(df['addicted_score'].mean()), 2),
-#             "avg_academic_impact": round(float(df['affects_academic_performance'].mean()), 2),
-#             "student_addicted_score": round(float(student_data['addicted_score'].iloc[0]), 2),
-#             "student_academic_impact": round(float(student_data['affects_academic_performance'].iloc[0]), 2) if 'affects_academic_performance' in student_data.columns else 0
-#         }
-        
-#         return {
-#             "id": student_id,
-#             "addiction_risk": addiction_pred["risk"],
-#             "addiction_probabilities": addiction_pred["probabilities"],
-#             "academic_risk": academic_pred["risk"],
-#             "academic_risk_probability": academic_pred["probability"],
-#             "dataset_stats": dataset_stats
-#         }
-#     except Exception as e:
-#         logger.error(f"Error en student_performance_prediction: {str(e)}")
-#         return {"error": str(e)}
+        # Predicciones
+        addiction_pred = social_media_addiction_risk(usage, addicted_score, mental_health, conflicts)
+        academic_pred = academic_performance_risk(usage, sleep, mental_health)
 
-# def addiction_by_country(historyModel=None, min_students=5):
-#     """Calcula el riesgo promedio de adicción por país basado en el historial."""
-#     try:
-#         df = load_data(historyModel)
-#         df = clean_data(df)
+        dataset_stats = {
+            "avg_addicted_score": round(float(df["Addicted_Score"].mean()), 2),
+            "avg_academic_impact": round(float(df["Affects_Academic_Performance"].mean()), 2),
+            "student_addicted_score": round(float(addicted_score), 2),
+            "student_academic_impact": round(float(student_data["Affects_Academic_Performance"].iloc[0]), 2)
+        }
 
-#         if df.empty:
-#             logger.error("No se encontraron datos para el historial especificado")
-#             return {"error": "No se encontraron datos para el historial especificado"}
+        return {
+            "id": student_id,
+            "addiction_risk": addiction_pred["risk"],
+            "addiction_probabilities": addiction_pred["probabilities"],
+            "academic_risk": academic_pred["risk"],
+            "academic_risk_probability": academic_pred["probability"],
+            "dataset_stats": dataset_stats
+        }
 
-#         if 'country' not in df.columns or 'addicted_score' not in df.columns:
-#             logger.error("Columnas 'country' o 'addicted_score' no encontradas")
-#             return {"error": "Columnas requeridas no encontradas"}
-        
-#         # Calcular promedio y conteo por país
-#         country_stats = df.groupby('country').agg({
-#             'addicted_score': ['mean', 'count'],
-#             'avg_daily_used_hours': 'mean'
-#         }).reset_index()
-        
-#         country_stats.columns = ['country', 'addicted_score_mean', 'addicted_score_count', 'avg_daily_used_hours_mean']
-        
-#         # Filtrar países con menos de min_students
-#         country_stats = country_stats[country_stats['addicted_score_count'] >= min_students]
-        
-#         result = {
-#             "countries": [],
-#             "avg_addicted_scores": [],
-#             "student_counts": [],
-#             "avg_usage_hours": []
-#         }
-        
-#         for _, row in country_stats.iterrows():
-#             result["countries"].append(row['country'])
-#             result["avg_addicted_scores"].append(round(float(row['addicted_score_mean']), 2))
-#             result["student_counts"].append(int(row['addicted_score_count']))
-#             result["avg_usage_hours"].append(round(float(row['avg_daily_used_hours_mean']), 2))
+    except Exception as e:
+        logger.error(f"Error en student_performance_prediction: {str(e)}")
+        return {"error": str(e)}
+    
+#Calcula y devuelve estadisticas de adicción por país        
+def addiction_by_country(min_students=5):
+    """
+    Calcula el riesgo promedio de adicción por país basado en el dataset Excel.
+    """
+    try:
+        df = load_dataset()
 
-#         # Estadísticas generales
-#         dataset_stats = {
-#             "total_students": len(df),
-#             "avg_addicted_score": round(float(df['addicted_score'].mean()), 2) if not df['addicted_score'].isna().all() else 0,
-#             "avg_usage_hours": round(float(df['avg_daily_used_hours'].mean()), 2) if not df['avg_daily_used_hours'].isna().all() else 0
-#         }
+        if "Country" not in df.columns or "Addicted_Score" not in df.columns:
+            return {"error": "Columnas requeridas no encontradas"}
 
-#         return {
-#             "country_data": result,
-#             "dataset_stats": dataset_stats
-#         }
-#     except Exception as e:
-#         logger.error(f"Error en addiction_by_country: {str(e)}")
-#         return {"error": str(e)}
+        country_stats = df.groupby("Country").agg({
+            "Addicted_Score": ["mean", "count"],
+            "Avg_Daily_Usage_Hours": "mean"
+        }).reset_index()
+
+        country_stats.columns = ["Country", "avg_addicted_score", "student_count", "avg_usage_hours"]
+        country_stats = country_stats[country_stats["student_count"] >= min_students]
+
+        result = {
+            "countries": country_stats["Country"].tolist(),
+            "avg_addicted_scores": [round(x, 2) for x in country_stats["avg_addicted_score"]],
+            "student_counts": country_stats["student_count"].tolist(),
+            "avg_usage_hours": [round(x, 2) for x in country_stats["avg_usage_hours"]]
+        }
+
+        dataset_stats = {
+            "total_students": len(df),
+            "avg_addicted_score": round(float(df["Addicted_Score"].mean()), 2),
+            "avg_usage_hours": round(float(df["Avg_Daily_Usage_Hours"].mean()), 2)
+        }
+
+        return {
+            "country_data": result,
+            "dataset_stats": dataset_stats
+        }
+
+    except Exception as e:
+        logger.error(f"Error en addiction_by_country: {str(e)}")
+        return {"error": str(e)}
+
+#Predice si un estudiante tiene riesgo alto o bajo de adicción según datos
+#Random forest
+def social_media_addiction_risk(usage_hours, addicted_score, mental_health_score, conflicts_score):
+    """
+    Predice el riesgo de adicción a redes sociales de un estudiante.
+    """
+    try:
+        df = load_dataset()
+        model, scaler = train_social_media_addiction_model(df)
+
+        input_df = pd.DataFrame([{
+            "Avg_Daily_Usage_Hours": usage_hours,
+            "Addicted_Score": addicted_score,
+            "Mental_Health_Score": mental_health_score,
+            "Conflicts_Over_Social_Media": conflicts_score
+        }])
+
+        input_scaled = scaler.transform(input_df)
+        prediction = model.predict(input_scaled)[0]
+        probabilities = model.predict_proba(input_scaled)[0]
+
+        return {
+            "risk": "Alto" if prediction == 1 else "Bajo",
+            "probabilities": {
+                "No adicción": round(probabilities[0], 3),
+                "Adicción": round(probabilities[1], 3)
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error en social_media_addiction_risk: {str(e)}")
+        return {
+            "risk": "Desconocido",
+            "probabilities": {},
+            "error": str(e)
+        }

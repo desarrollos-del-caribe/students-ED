@@ -7,7 +7,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score, accuracy_score, classification_report
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 
-def train_mental_health_model(df):
+def train_mental_health_model(df): #Regresion lineal multiple
     """
     Entrena un modelo de regresión lineal múltiple para predecir la salud mental
     a partir del uso de redes sociales y estilo de vida.
@@ -53,7 +53,7 @@ def train_mental_health_model(df):
     # Retornar el modelo y el scaler (para usar en predicción)
     return model, scaler
 
-def train_sleep_prediction_model(df):
+def train_sleep_prediction_model(df): #Regresión lineal simple
     """
     Entrena un modelo de regresión lineal simple para predecir las horas de sueño
     en función del uso diario de redes sociales.
@@ -79,7 +79,7 @@ def train_sleep_prediction_model(df):
 
     return model, scaler
 
-def train_academic_impact_model(df):
+def train_academic_impact_model(df): #Regresión logística
     """
     Entrena un modelo de regresión logística para predecir si el uso de redes afecta el rendimiento académico.
     """
@@ -110,4 +110,69 @@ def train_academic_impact_model(df):
     acc = accuracy_score(y_test, y_pred)
 
     print(f"📊 Modelo académico entrenado: Accuracy = {acc:.2f}")
+    return model, scaler
+
+
+def train_academic_performance_risk_model(df): #Modelo de regresión logistica
+    """
+    Entrena un modelo para predecir el riesgo académico (afectación del rendimiento).
+    """
+    required_cols = [
+        "Avg_Daily_Usage_Hours",
+        "Sleep_Hours_Per_Night",
+        "Mental_Health_Score",
+        "Affects_Academic_Performance"
+    ]
+
+    if not all(col in df.columns for col in required_cols):
+        raise ValueError("Faltan columnas necesarias para entrenar el modelo de riesgo académico.")
+
+    X = df[["Avg_Daily_Usage_Hours", "Sleep_Hours_Per_Night", "Mental_Health_Score"]]
+    y = df["Affects_Academic_Performance"]
+
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+
+    model = LogisticRegression(max_iter=1000)
+    model.fit(X_train, y_train)
+
+    y_pred = model.predict(X_test)
+    acc = accuracy_score(y_test, y_pred)
+    print(f"📊 Modelo de riesgo académico entrenado: Accuracy = {acc:.2f}")
+
+    return model, scaler
+
+
+def train_social_media_addiction_model(df): #Random Forest (clasificación)	
+    """
+    Entrena un modelo para predecir riesgo de adicción a redes sociales.
+    """
+    required_cols = [
+        "Avg_Daily_Usage_Hours",
+        "Addicted_Score",
+        "Mental_Health_Score",
+        "Conflicts_Over_Social_Media"
+    ]
+
+    if not all(col in df.columns for col in required_cols):
+        raise ValueError("Faltan columnas necesarias para entrenar el modelo de adicción.")
+
+    X = df[required_cols]
+    y = (df["Addicted_Score"] > 6).astype(int)  # Etiqueta binaria: riesgo si el score es alto (se puede ajustar el umbral)
+
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    model.fit(X_train, y_train)
+
+    y_pred = model.predict(X_test)
+    acc = accuracy_score(y_test, y_pred)
+
+    print(f"✅ Modelo de adicción entrenado. Accuracy: {acc:.2f}")
+
     return model, scaler
