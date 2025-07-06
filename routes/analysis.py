@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from services.analysis_model import predict_mental_health_score, predict_sleep_hours, academic_performance_risk, student_performance_prediction, addiction_by_country, social_media_addiction_risk, visualize_decision_tree, run_kmeans_clustering
+from services.analysis_model import predict_mental_health_score, predict_sleep_hours, academic_performance_risk, student_performance_prediction, addiction_by_country, social_media_addiction_risk, visualize_decision_tree, run_kmeans_clustering, predict_academic_impact, plot_correlation_heatmap
 
 analysis_bp = Blueprint('analysis', __name__, url_prefix='/api/models')
 

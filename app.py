@@ -35,29 +35,10 @@ app.register_blueprint(analysis_bp)
 
 # Crear directorios necesarios al iniciar
 def ensure_directories():
-    """Crear directorios necesarios si no existen"""
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    data_dir = os.path.join(base_dir, "data", "excel")
-    backup_dir = os.path.join(data_dir, "backups")
-    
-    os.makedirs(data_dir, exist_ok=True)
-    os.makedirs(backup_dir, exist_ok=True)
-
-# Inicializar archivos Excel al iniciar la aplicación
-def initialize_excel_files():
-    """Inicializar archivos Excel con datos de ejemplo"""
     try:
-        from utils.excel_utils import UsersExcelHandler, ModelsExcelHandler, PredictionsExcelHandler
-        
-        # Inicializar handlers (esto creará archivos si no existen)
-        users_handler = UsersExcelHandler()
-        models_handler = ModelsExcelHandler()
-        predictions_handler = PredictionsExcelHandler()
-        
-        print("✅ Archivos Excel inicializados correctamente")
-        
-    except Exception as e:
-        print(f"⚠️ Error inicializando archivos Excel: {str(e)}")
+        os.makedirs('static/graphs')
+    except FileExistsError:
+        print("Los directorios ya existen, no es necesario crearlos.")
 
 # Ruta principal de la API
 @app.route('/api', methods=['GET'])
@@ -110,17 +91,5 @@ def internal_error(error):
 if __name__ == '__main__':
     print("🚀 Iniciando API de Análisis de Redes Sociales...")
     
-    # Crear directorios necesarios
     ensure_directories()
-    print("📁 Directorios creados/verificados")
-    
-    # Inicializar archivos Excel
-    initialize_excel_files()
-    
-    print("🌐 Servidor disponible en:")
-    print("   - Local: http://localhost:5000")
-    print("   - API: http://localhost:5000/api")
-    print("📋 Endpoints principales:")
-    print("   - GET /api/models - Modelos ML disponibles")
-    
     app.run(host='0.0.0.0', port=5000, debug=True)
