@@ -1,9 +1,15 @@
 # Predicciones
-
 import pandas as pd
 from .excel_service import load_dataset
-from .ml_service import train_mental_health_model, train_sleep_prediction_model, train_academic_impact_model, train_academic_performance_risk_model, train_social_media_addiction_model
+from .ml_service import train_mental_health_model, train_sleep_prediction_model, train_academic_impact_model, train_academic_performance_risk_model, train_social_media_addiction_model, train_decision_tree_model, train_kmeans_model
+from utils.helpers import save_plot_image_with_timestamp, clean_old_graphs
+import seaborn as sns
 import logging
+import matplotlib.pyplot as plt
+from sklearn.tree import plot_tree
+import os
+
+GRAPH_DIR = os.path.join(os.path.dirname(__file__), '../static/graphs')
 
 logger = logging.getLogger(__name__)
 
@@ -282,3 +288,32 @@ def social_media_addiction_risk(usage_hours, addicted_score, mental_health_score
             "probabilities": {},
             "error": str(e)
         }
+
+#Árbol de desición
+def visualize_decision_tree(target_column):
+    df = load_dataset()
+    model, features = train_decision_tree_model(df, target_column)
+
+    # Graficar
+    plt.figure(figsize=(12, 6))
+    plot_tree(model, feature_names=features, filled=True, class_names=True)
+
+    # Limpiar imágenes viejas antes de guardar
+    clean_old_graphs(GRAPH_DIR)
+
+    return save_plot_image_with_timestamp(f"tree_{target_column}")
+
+#Clustering
+def run_kmeans_clustering(n_clusters=3):
+    df = load_dataset()
+    model, columns, X_scaled = train_kmeans_model(df, n_clusters)
+
+    df_plot = pd.DataFrame(X_scaled[:, :2], columns=["Feature1", "Feature2"])
+    df_plot["Cluster"] = model.labels_
+
+    plt.figure(figsize=(8, 6))
+    sns.scatterplot(data=df_plot, x="Feature1", y="Feature2", hue="Cluster", palette="Set2")
+
+    clean_old_graphs(GRAPH_DIR)
+
+    return save_plot_image_with_timestamp("kmeans_clusters")

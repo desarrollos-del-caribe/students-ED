@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from services.analysis_model import predict_mental_health_score, predict_sleep_hours, academic_performance_risk, student_performance_prediction, addiction_by_country, social_media_addiction_risk
+from services.analysis_model import predict_mental_health_score, predict_sleep_hours, academic_performance_risk, student_performance_prediction, addiction_by_country, social_media_addiction_risk, visualize_decision_tree, run_kmeans_clustering
 
 analysis_bp = Blueprint('analysis', __name__, url_prefix='/api/models')
 
@@ -137,3 +137,31 @@ def predict_addiction_risk():
     except Exception as e:
         print(f"Error en /addiction-risk: {str(e)}")
         return jsonify({"error": "Error al predecir riesgo de adicción."}), 500    
+    
+#Árbol de decisión
+@analysis_bp.route('/tree-visualization', methods=['GET'])
+def tree_visualization():
+    """
+    Visualiza árbol de decisión para un target (adicción o rendimiento).
+    Parámetro: ?target=Addicted_Score o Affects_Academic_Performance
+    """
+    try:
+        target = request.args.get("target", "Addicted_Score")
+        image_url = visualize_decision_tree(target)
+        return jsonify({"graph_url": image_url}), 200
+    except Exception as e:
+        return jsonify({"error": f"Error generando el árbol: {str(e)}"}), 500
+
+#Clustering
+@analysis_bp.route('/kmeans-clustering', methods=['GET'])
+def kmeans_visualization():
+    """
+    Visualiza agrupación de estudiantes por KMeans.
+    Parámetro opcional: ?clusters=3
+    """
+    try:
+        n_clusters = int(request.args.get("clusters", 3))
+        image_url = run_kmeans_clustering(n_clusters)
+        return jsonify({"graph_url": image_url}), 200
+    except Exception as e:
+        return jsonify({"error": f"Error en clustering: {str(e)}"}), 500

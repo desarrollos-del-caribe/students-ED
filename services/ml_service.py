@@ -2,12 +2,18 @@
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.cluster import KMeans
-from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
+from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier, plot_tree
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score, accuracy_score, classification_report
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 
-def train_mental_health_model(df): #Regresion lineal multiple
+import matplotlib.pyplot as plt
+import seaborn as sns
+import time
+import os
+
+#Regresion lineal multiple
+def train_mental_health_model(df): 
     """
     Entrena un modelo de regresión lineal múltiple para predecir la salud mental
     a partir del uso de redes sociales y estilo de vida.
@@ -53,7 +59,8 @@ def train_mental_health_model(df): #Regresion lineal multiple
     # Retornar el modelo y el scaler (para usar en predicción)
     return model, scaler
 
-def train_sleep_prediction_model(df): #Regresión lineal simple
+#Regresión lineal simple
+def train_sleep_prediction_model(df): 
     """
     Entrena un modelo de regresión lineal simple para predecir las horas de sueño
     en función del uso diario de redes sociales.
@@ -79,7 +86,8 @@ def train_sleep_prediction_model(df): #Regresión lineal simple
 
     return model, scaler
 
-def train_academic_impact_model(df): #Regresión logística
+#Regresión logística
+def train_academic_impact_model(df): 
     """
     Entrena un modelo de regresión logística para predecir si el uso de redes afecta el rendimiento académico.
     """
@@ -112,8 +120,8 @@ def train_academic_impact_model(df): #Regresión logística
     print(f"📊 Modelo académico entrenado: Accuracy = {acc:.2f}")
     return model, scaler
 
-
-def train_academic_performance_risk_model(df): #Modelo de regresión logistica
+#Modelo de regresión logistica
+def train_academic_performance_risk_model(df): 
     """
     Entrena un modelo para predecir el riesgo académico (afectación del rendimiento).
     """
@@ -144,8 +152,8 @@ def train_academic_performance_risk_model(df): #Modelo de regresión logistica
 
     return model, scaler
 
-
-def train_social_media_addiction_model(df): #Random Forest (clasificación)	
+#Random Forest (clasificación)
+def train_social_media_addiction_model(df): 	
     """
     Entrena un modelo para predecir riesgo de adicción a redes sociales.
     """
@@ -176,3 +184,44 @@ def train_social_media_addiction_model(df): #Random Forest (clasificación)
     print(f"✅ Modelo de adicción entrenado. Accuracy: {acc:.2f}")
 
     return model, scaler
+
+#Árbol de decisión
+def train_decision_tree_model(df, target_column):
+    """
+    Entrena un árbol de decisión para clasificación.
+    """
+    features = [
+        "Avg_Daily_Usage_Hours",
+        "Sleep_Hours_Per_Night",
+        "Mental_Health_Score",
+        "Addicted_Score",
+        "Conflicts_Over_Social_Media"
+    ]
+
+    if not all(col in df.columns for col in features + [target_column]):
+        raise ValueError("Faltan columnas para entrenar árbol de decisión.")
+
+    X = df[features]
+    y = df[target_column]
+
+    model = DecisionTreeClassifier(max_depth=4)
+    model.fit(X, y)
+
+    return model, features
+
+#Clustering
+def train_kmeans_model(df, n_clusters=3):
+    """
+    Aplica KMeans clustering sobre variables numéricas del dataset.
+    """
+    numeric_df = df.select_dtypes(include=['number']).drop(columns=["Student_ID"], errors="ignore")
+    if numeric_df.empty:
+        raise ValueError("No hay columnas numéricas para clustering.")
+
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(numeric_df)
+
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+    kmeans.fit(X_scaled)
+
+    return kmeans, numeric_df.columns.tolist(), X_scaled
