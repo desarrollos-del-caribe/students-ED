@@ -1,92 +1,30 @@
-import pandas as pd
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.preprocessing import StandardScaler
-from sklearn.cluster import KMeans
-from config import Config
-import logging
+# Predicciones
 
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import pandas as pd
+from excel_service import load_dataset
+from ml_service import train_social_media_addiction_model
+from utils.helpers import generate_risk_recommendations # Para los mensajes o consejos
+
+import logging
 logger = logging.getLogger(__name__)
 
-def clean_data(df):
-    """Limpia los datos manejando valores nulos y tipos de datos."""
-    df = df.copy()
-    numeric_cols = ['avg_daily_used_hours', 'addicted_score', 'mental_health_score', 
-                    'conflicts_over_social_media', 'sleep_hours_per_night', 'age']
-    for col in numeric_cols:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-            mean_value = df[col].mean() if not df[col].isna().all() else 0
-            df[col] = df[col].fillna(mean_value)
-    return df
-
-def load_data(historyModel=None):
-    """Carga datos de Tbl_Students_Model con unión a Tbl_Countries."""
+def predict_social_media_addiction_risk(usage_hours, addicted_score, mental_health_score, conflicts_score):
     try:
-        conn = Config.get_connection()
-        if conn is None:
-            raise Exception("No se pudo establecer la conexión a la base de datos")
-        
-        if historyModel is not None:
-            query = """
-                SELECT s.*, c.name_country AS country
-                FROM Tbl_Students_Model s
-                LEFT JOIN Tbl_Countries c ON s.country_id = c.id
-                WHERE s.history_models_import_id = %s
-            """
-            params = (historyModel,)
-        else:
-            query = """
-                SELECT s.*, c.name_country AS country
-                FROM Tbl_Students_Model s
-                LEFT JOIN Tbl_Countries c ON s.country_id = c.id
-            """
-            params = ()
+        df = load_dataset()
+        model = train_social_media_addiction_model(df)
 
-        df = pd.read_sql_query(query, conn, params=params)
-        conn.close()
-        return df
-    except Exception as e:
-        logger.error(f"Error cargando datos: {str(e)}")
-        if 'conn' in locals() and conn is not None:
-            conn.close()
-        return pd.DataFrame()
-
-def social_media_addiction_risk(usage_hours, addicted_score, mental_health_score, conflicts_score, historyModel=None):
-    """Predice riesgo de adicción usando DecisionTreeClassifier basado en el historial."""
-    try:
-        df = load_data(historyModel)
-        df = clean_data(df)
-
-        required_cols = ['avg_daily_used_hours', 'addicted_score', 'mental_health_score', 'conflicts_over_social_media']
-        if not all(col in df.columns for col in required_cols):
-            logger.error("Columnas requeridas no encontradas")
-            return {"risk": "Bajo", "probabilities": {"Bajo": 1.0, "Medio": 0.0, "Alto": 0.0}, "dataset_stats": {}}
-
-        def clasificar_riesgo(row):
-            if row['avg_daily_used_hours'] > 5 and row['addicted_score'] >= 7 and row['conflicts_over_social_media'] >= 2:
-                return "Alto"
-            elif row['addicted_score'] >= 5 or row['mental_health_score'] <= 5:
-                return "Medio"
-            else:
-                return "Bajo"
-
-        df['Riesgo_Adiccion'] = df.apply(clasificar_riesgo, axis=1)
-        X = df[required_cols]
-        y = df['Riesgo_Adiccion']
-
-        model = DecisionTreeClassifier(max_depth=3, random_state=42)
-        model.fit(X, y)
-
-        entrada = pd.DataFrame([{
+        input_df = pd.DataFrame([{
             'avg_daily_used_hours': usage_hours,
             'addicted_score': addicted_score,
             'mental_health_score': mental_health_score,
             'conflicts_over_social_media': conflicts_score
         }])
 
-        pred = model.predict(entrada)[0]
-        probs = model.predict_proba(entrada)[0]
+        pred = model.predict(input_df)[0]
+        probs = model.predict_proba(input_df)[0]
         classes = model.classes_
         probabilities = {cls: round(float(prob), 4) for cls, prob in zip(classes, probs)}
 
@@ -96,14 +34,27 @@ def social_media_addiction_risk(usage_hours, addicted_score, mental_health_score
             "avg_mental_health_score": round(float(df['mental_health_score'].mean()), 2),
             "avg_conflicts_score": round(float(df['conflicts_over_social_media'].mean()), 2)
         }
+
+        recommendations = generate_risk_recommendations(
+            risk_score=0,  # Aquí puedes definir una fórmula real
+            risk_factors=[pred]
+        )
+
         return {
             "risk": pred,
             "probabilities": probabilities,
-            "dataset_stats": dataset_stats
+            "dataset_stats": dataset_stats,
+            "recommendations": recommendations
         }
+
     except Exception as e:
-        logger.error(f"Error en social_media_addiction_risk: {str(e)}")
-        return {"risk": "Bajo", "probabilities": {"Bajo": 1.0, "Medio": 0.0, "Alto": 0.0}, "dataset_stats": {}}
+        logger.error(f"Error en predict_social_media_addiction_risk: {str(e)}")
+        return {
+            "risk": "Bajo",
+            "probabilities": {"Bajo": 1.0, "Medio": 0.0, "Alto": 0.0},
+            "dataset_stats": {},
+            "recommendations": []
+        }
 
 def academic_performance_risk(usage_hours, sleep_hours, mental_health_score, historyModel=None):
     """Predice riesgo académico usando LogisticRegression basado en el historial."""
