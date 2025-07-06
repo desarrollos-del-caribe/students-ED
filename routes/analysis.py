@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from services.analysis_model import predict_mental_health_score, predict_sleep_hours
+from services.analysis_model import predict_mental_health_score, predict_sleep_hours, academic_performance_risk
 
 analysis_bp = Blueprint('analysis', __name__, url_prefix='/api/models')
 
@@ -68,3 +68,26 @@ def predict_academic_impact_endpoint():
     except Exception as e:
         print(f"Error en /academic-impact: {str(e)}")
         return jsonify({"error": "Error al predecir impacto académico"}), 500
+
+#Predecir el riesgo de que el rendimiento academico se vea afectado pos: horas de uso, salud mental y horas de sueño
+@analysis_bp.route('/academic-risk', methods=['POST'])
+def predict_academic_risk():
+    """
+    Predice el riesgo académico usando horas de uso, sueño y salud mental.
+    """
+    try:
+        data = request.get_json()
+        required = ["usage_hours", "sleep_hours", "mental_health_score"]
+        if not all(k in data for k in required):
+            return jsonify({"error": "Faltan campos requeridos"}), 400
+
+        result = academic_performance_risk(
+            usage_hours=data["usage_hours"],
+            sleep_hours=data["sleep_hours"],
+            mental_health_score=data["mental_health_score"]
+        )
+        return jsonify(result), 200
+
+    except Exception as e:
+        print(f"Error en /academic-risk: {str(e)}")
+        return jsonify({"error": "Error al predecir riesgo académico"}), 500

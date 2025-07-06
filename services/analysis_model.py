@@ -2,7 +2,7 @@
 
 import pandas as pd
 from .excel_service import load_dataset
-from .ml_service import train_mental_health_model, train_sleep_prediction_model, train_academic_impact_model
+from .ml_service import train_mental_health_model, train_sleep_prediction_model, train_academic_impact_model, train_academic_performance_risk_model
 import logging
 
 logger = logging.getLogger(__name__)
@@ -119,48 +119,47 @@ def predict_academic_impact(usage_hours, sleep_hours, mental_health_score):
             "dataset_stats": {},
             "error": str(e)
         }
+#Predecir el riesgo de que el rendimiento academico se vea afectado pos: horas de uso, salud mental y horas de sueño
+def academic_performance_risk(usage_hours, sleep_hours, mental_health_score):
+    """
+    Predice el riesgo académico usando un modelo de regresión logística.
+    """
+    try:
+        df = load_dataset()
+        model, scaler = train_academic_performance_risk_model(df)
 
-# def academic_performance_risk(usage_hours, sleep_hours, mental_health_score, historyModel=None):
-#     """Predice riesgo académico usando LogisticRegression basado en el historial."""
-#     try:
-#         df = load_data(historyModel)
-#         df = clean_data(df)
+        input_df = pd.DataFrame([{
+            "Avg_Daily_Usage_Hours": usage_hours,
+            "Sleep_Hours_Per_Night": sleep_hours,
+            "Mental_Health_Score": mental_health_score
+        }])
 
-#         required_cols = ['avg_daily_used_hours', 'sleep_hours_per_night', 'mental_health_score', 'affects_academic_performance']
-#         if not all(col in df.columns for col in required_cols):
-#             logger.error("Columnas requeridas no encontradas")
-#             return {"risk": "Bajo", "probability": 0, "dataset_stats": {}}
+        input_scaled = scaler.transform(input_df)
+        prediction = model.predict(input_scaled)[0]
+        probability = model.predict_proba(input_scaled)[0][1]
 
-#         X = df[['avg_daily_used_hours', 'sleep_hours_per_night', 'mental_health_score']]
-#         y = df['affects_academic_performance']
+        dataset_stats = {
+            "avg_usage_hours": round(float(df["Avg_Daily_Usage_Hours"].mean()), 2),
+            "avg_sleep_hours": round(float(df["Sleep_Hours_Per_Night"].mean()), 2),
+            "avg_mental_health_score": round(float(df["Mental_Health_Score"].mean()), 2),
+            "avg_academic_impact": round(float(df["Affects_Academic_Performance"].mean()), 2)
+        }
 
-#         model = LogisticRegression(max_iter=1000)
-#         model.fit(X, y)
+        return {
+            "risk": "Alto" if prediction == 1 else "Bajo",
+            "probability": round(float(probability), 4),
+            "dataset_stats": dataset_stats
+        }
 
-#         entrada = pd.DataFrame([{
-#             'avg_daily_used_hours': usage_hours,
-#             'sleep_hours_per_night': sleep_hours,
-#             'mental_health_score': mental_health_score
-#         }])
-
-#         prob = model.predict_proba(entrada)[0][1]
-#         pred = model.predict(entrada)[0]
-
-#         dataset_stats = {
-#             "avg_usage_hours": round(float(df['avg_daily_used_hours'].mean()), 2),
-#             "avg_sleep_hours": round(float(df['sleep_hours_per_night'].mean()), 2),
-#             "avg_mental_health_score": round(float(df['mental_health_score'].mean()), 2),
-#             "avg_academic_impact": round(float(df['affects_academic_performance'].mean()), 2)
-#         }
-#         return {
-#             "risk": "Alto" if pred == 1 else "Bajo",
-#             "probability": round(prob, 4),
-#             "dataset_stats": dataset_stats
-#         }
-#     except Exception as e:
-#         logger.error(f"Error en academic_performance_risk: {str(e)}")
-#         return {"risk": "Bajo", "probability": 0, "dataset_stats": {}}
-
+    except Exception as e:
+        logger.error(f"Error en academic_performance_risk: {str(e)}")
+        return {
+            "risk": "Bajo",
+            "probability": 0,
+            "dataset_stats": {},
+            "error": str(e)
+        }
+        
 # def student_performance_prediction(student_id, historyModel=None):
 #     """Predice el rendimiento académico y riesgo de adicción para un estudiante específico."""
 #     try:
