@@ -165,3 +165,15 @@ def kmeans_visualization():
         return jsonify({"graph_url": image_url}), 200
     except Exception as e:
         return jsonify({"error": f"Error en clustering: {str(e)}"}), 500
+     
+#Mapa de calor
+@analysis_bp.route('/correlation-heatmap', methods=['GET'])
+def get_correlation_heatmap():
+    """
+    Muestra un mapa de calor de correlación entre variables numéricas.
+    """
+    try:
+        image_url = plot_correlation_heatmap()
+        return jsonify({"graph_url": image_url}), 200
+    except Exception as e:
+        return jsonify({"error": f"Error generando el mapa de calor: {str(e)}"}), 500

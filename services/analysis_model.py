@@ -3,6 +3,7 @@ import pandas as pd
 from .excel_service import load_dataset
 from .ml_service import train_mental_health_model, train_sleep_prediction_model, train_academic_impact_model, train_academic_performance_risk_model, train_social_media_addiction_model, train_decision_tree_model, train_kmeans_model
 from utils.helpers import save_plot_image_with_timestamp, clean_old_graphs
+from .graph_service import plot_mental_health_comparison, plot_addiction_risk_bar, plot_student_performance_comparison, plot_academic_risk_pie, plot_addiction_by_country, plot_correlation_heatmap
 import seaborn as sns
 import logging
 import matplotlib.pyplot as plt
@@ -14,16 +15,10 @@ GRAPH_DIR = os.path.join(os.path.dirname(__file__), '../static/graphs')
 logger = logging.getLogger(__name__)
 
 def predict_mental_health_score(usage_hours, sleep_hours, addicted_score, conflicts_score, academic_impact):
-    """
-    Predice el score de salud mental con base en hábitos del usuario.
-    """
     try:
         df = load_dataset()
-
-        # Entrenar modelo
         model, scaler = train_mental_health_model(df)
 
-        # Datos de entrada en el mismo orden que el entrenamiento
         input_df = pd.DataFrame([{
             "Avg_Daily_Usage_Hours": usage_hours,
             "Sleep_Hours_Per_Night": sleep_hours,
@@ -35,7 +30,6 @@ def predict_mental_health_score(usage_hours, sleep_hours, addicted_score, confli
         input_scaled = scaler.transform(input_df)
         prediction = model.predict(input_scaled)[0]
 
-        # Estadísticas del dataset
         dataset_stats = {
             "avg_usage_hours": round(float(df["Avg_Daily_Usage_Hours"].mean()), 2),
             "avg_sleep_hours": round(float(df["Sleep_Hours_Per_Night"].mean()), 2),
@@ -45,9 +39,12 @@ def predict_mental_health_score(usage_hours, sleep_hours, addicted_score, confli
             "avg_mental_health_score": round(float(df["Mental_Health_Score"].mean()), 2)
         }
 
+        graph_url = plot_mental_health_comparison(prediction, dataset_stats["avg_mental_health_score"])
+
         return {
             "predicted_score": round(float(prediction), 2),
-            "dataset_stats": dataset_stats
+            "dataset_stats": dataset_stats,
+            "graph_url": graph_url
         }
 
     except Exception as e:
@@ -99,7 +96,7 @@ def predict_academic_impact(usage_hours, sleep_hours, mental_health_score):
 
         input_scaled = scaler.transform(input_df)
         prediction = model.predict(input_scaled)[0]
-        probability = model.predict_proba(input_scaled)[0][1]  # Probabilidad de que sea 1
+        probability = model.predict_proba(input_scaled)[0][1]
 
         dataset_stats = {
             "avg_usage_hours": round(float(df["Avg_Daily_Usage_Hours"].mean()), 2),
@@ -125,12 +122,29 @@ def predict_academic_impact(usage_hours, sleep_hours, mental_health_score):
             "dataset_stats": {},
             "error": str(e)
         }
+
+        return {
+            "impact": "Sí" if prediction == 1 else "No",
+            "probability": round(float(probability), 4),
+            "dataset_stats": dataset_stats,
+            "message": (
+                "Según tus hábitos, es probable que tu rendimiento académico "
+                + ("esté siendo afectado." if prediction == 1 else "no esté siendo afectado significativamente.")
+            )
+        }
+
+    except Exception as e:
+        logger.error(f"Error en predict_academic_impact: {str(e)}")
+        return {
+            "impact": "No",
+            "probability": 0,
+            "dataset_stats": {},
+            "error": str(e)
+        }
+        
 #Predecir el riesgo de que el rendimiento academico se vea afectado pos: horas de uso, salud mental y horas de sueño
 #Regresión logística	
 def academic_performance_risk(usage_hours, sleep_hours, mental_health_score):
-    """
-    Predice el riesgo académico usando un modelo de regresión logística.
-    """
     try:
         df = load_dataset()
         model, scaler = train_academic_performance_risk_model(df)
@@ -152,10 +166,13 @@ def academic_performance_risk(usage_hours, sleep_hours, mental_health_score):
             "avg_academic_impact": round(float(df["Affects_Academic_Performance"].mean()), 2)
         }
 
+        graph_url = plot_academic_risk_pie(probability)
+
         return {
             "risk": "Alto" if prediction == 1 else "Bajo",
             "probability": round(float(probability), 4),
-            "dataset_stats": dataset_stats
+            "dataset_stats": dataset_stats,
+            "graph_url": graph_url
         }
 
     except Exception as e:
@@ -169,7 +186,6 @@ def academic_performance_risk(usage_hours, sleep_hours, mental_health_score):
  
 #Usa los mdoelos de social_media_addiction_risk y academic_performance_risk para devolver predicciones  
 def student_performance_prediction(student_id):
-    """Predice el rendimiento académico y riesgo de adicción para un estudiante específico usando el dataset Excel."""
     try:
         df = load_dataset()
 
@@ -180,14 +196,12 @@ def student_performance_prediction(student_id):
         if student_data.empty:
             return {"error": f"Estudiante con ID {student_id} no encontrado"}
 
-        # Extraer valores del estudiante
         usage = student_data["Avg_Daily_Usage_Hours"].iloc[0]
         addicted_score = student_data["Addicted_Score"].iloc[0]
         mental_health = student_data["Mental_Health_Score"].iloc[0]
         conflicts = student_data["Conflicts_Over_Social_Media"].iloc[0]
         sleep = student_data["Sleep_Hours_Per_Night"].iloc[0]
 
-        # Predicciones
         addiction_pred = social_media_addiction_risk(usage, addicted_score, mental_health, conflicts)
         academic_pred = academic_performance_risk(usage, sleep, mental_health)
 
@@ -198,13 +212,19 @@ def student_performance_prediction(student_id):
             "student_academic_impact": round(float(student_data["Affects_Academic_Performance"].iloc[0]), 2)
         }
 
+        graph_url = plot_student_performance_comparison(
+            addicted_score, dataset_stats["avg_addicted_score"],
+            dataset_stats["student_academic_impact"], dataset_stats["avg_academic_impact"]
+        )
+
         return {
             "id": student_id,
             "addiction_risk": addiction_pred["risk"],
             "addiction_probabilities": addiction_pred["probabilities"],
             "academic_risk": academic_pred["risk"],
             "academic_risk_probability": academic_pred["probability"],
-            "dataset_stats": dataset_stats
+            "dataset_stats": dataset_stats,
+            "graph_url": graph_url
         }
 
     except Exception as e:
@@ -213,9 +233,6 @@ def student_performance_prediction(student_id):
     
 #Calcula y devuelve estadisticas de adicción por país        
 def addiction_by_country(min_students=5):
-    """
-    Calcula el riesgo promedio de adicción por país basado en el dataset Excel.
-    """
     try:
         df = load_dataset()
 
@@ -243,9 +260,12 @@ def addiction_by_country(min_students=5):
             "avg_usage_hours": round(float(df["Avg_Daily_Usage_Hours"].mean()), 2)
         }
 
+        graph_url = plot_addiction_by_country(result["countries"], result["avg_addicted_scores"])
+
         return {
             "country_data": result,
-            "dataset_stats": dataset_stats
+            "dataset_stats": dataset_stats,
+            "graph_url": graph_url
         }
 
     except Exception as e:
@@ -255,9 +275,6 @@ def addiction_by_country(min_students=5):
 #Predice si un estudiante tiene riesgo alto o bajo de adicción según datos
 #Random forest
 def social_media_addiction_risk(usage_hours, addicted_score, mental_health_score, conflicts_score):
-    """
-    Predice el riesgo de adicción a redes sociales de un estudiante.
-    """
     try:
         df = load_dataset()
         model, scaler = train_social_media_addiction_model(df)
@@ -273,12 +290,15 @@ def social_media_addiction_risk(usage_hours, addicted_score, mental_health_score
         prediction = model.predict(input_scaled)[0]
         probabilities = model.predict_proba(input_scaled)[0]
 
+        graph_url = plot_addiction_risk_bar(probabilities[0], probabilities[1])
+
         return {
             "risk": "Alto" if prediction == 1 else "Bajo",
             "probabilities": {
                 "No adicción": round(probabilities[0], 3),
                 "Adicción": round(probabilities[1], 3)
-            }
+            },
+            "graph_url": graph_url
         }
 
     except Exception as e:
@@ -313,7 +333,5 @@ def run_kmeans_clustering(n_clusters=3):
 
     plt.figure(figsize=(8, 6))
     sns.scatterplot(data=df_plot, x="Feature1", y="Feature2", hue="Cluster", palette="Set2")
-
     clean_old_graphs(GRAPH_DIR)
-
     return save_plot_image_with_timestamp("kmeans_clusters")
