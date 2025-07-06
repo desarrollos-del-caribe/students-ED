@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from services.analysis_model import predict_mental_health_score, predict_sleep_hours, academic_performance_risk
+from services.analysis_model import predict_mental_health_score, predict_sleep_hours, academic_performance_risk, student_performance_prediction, addiction_by_country, social_media_addiction_risk
 
 analysis_bp = Blueprint('analysis', __name__, url_prefix='/api/models')
 
@@ -91,3 +91,49 @@ def predict_academic_risk():
     except Exception as e:
         print(f"Error en /academic-risk: {str(e)}")
         return jsonify({"error": "Error al predecir riesgo académico"}), 500
+    
+#Predice el rendimiento del estudiante con base a los modelos de riesgo de adicción y rendimiento   
+@analysis_bp.route('/student-performance/<int:student_id>', methods=['GET'])
+def get_student_performance(student_id):
+    try:
+        result = student_performance_prediction(student_id)
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({"error": f"Error al predecir rendimiento: {str(e)}"}), 500
+
+
+#Obtener estadisticas de adicción por país
+@analysis_bp.route('/addiction-by-country', methods=['GET'])
+def get_addiction_by_country():
+    try:
+        min_students = int(request.args.get('min_students', 5))
+        result = addiction_by_country(min_students=min_students)
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({"error": f"Error en adicción por país: {str(e)}"}), 500 
+    
+#Predecir si un estudiante tiene un nivel alto o bajo de riesgo de adiccón
+@analysis_bp.route('/addiction-risk', methods=['POST'])
+def predict_addiction_risk():
+    """
+    Endpoint para predecir el riesgo de adicción a redes sociales.
+    """
+    try:
+        data = request.get_json()
+
+        required_fields = ["usage_hours", "addicted_score", "mental_health_score", "conflicts_score"]
+        if not all(field in data for field in required_fields):
+            return jsonify({"error": "Faltan campos requeridos."}), 400
+
+        result = social_media_addiction_risk(
+            usage_hours=data["usage_hours"],
+            addicted_score=data["addicted_score"],
+            mental_health_score=data["mental_health_score"],
+            conflicts_score=data["conflicts_score"]
+        )
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        print(f"Error en /addiction-risk: {str(e)}")
+        return jsonify({"error": "Error al predecir riesgo de adicción."}), 500    

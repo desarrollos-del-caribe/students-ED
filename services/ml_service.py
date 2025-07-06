@@ -145,3 +145,34 @@ def train_academic_performance_risk_model(df): #Modelo de regresión logistica
     return model, scaler
 
 
+def train_social_media_addiction_model(df):
+    """
+    Entrena un modelo para predecir riesgo de adicción a redes sociales.
+    """
+    required_cols = [
+        "Avg_Daily_Usage_Hours",
+        "Addicted_Score",
+        "Mental_Health_Score",
+        "Conflicts_Over_Social_Media"
+    ]
+
+    if not all(col in df.columns for col in required_cols):
+        raise ValueError("Faltan columnas necesarias para entrenar el modelo de adicción.")
+
+    X = df[required_cols]
+    y = (df["Addicted_Score"] > 6).astype(int)  # Etiqueta binaria: riesgo si el score es alto (se puede ajustar el umbral)
+
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    model.fit(X_train, y_train)
+
+    y_pred = model.predict(X_test)
+    acc = accuracy_score(y_test, y_pred)
+
+    print(f"✅ Modelo de adicción entrenado. Accuracy: {acc:.2f}")
+
+    return model, scaler
