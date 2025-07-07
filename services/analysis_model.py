@@ -413,19 +413,55 @@ def visualize_decision_tree(target_column):
 
 
 #Clustering
-def run_kmeans_clustering(n_clusters=3):
+def run_kmeans_clustering(user_data, n_clusters=3):
     df = load_dataset()
-    model, columns, X_scaled = train_kmeans_model(df, n_clusters)
 
+    # Usamos solo las columnas numéricas relevantes
+    features = [
+        "Age",
+        "Avg_Daily_Usage_Hours",
+        "Sleep_Hours_Per_Night",
+        "Conflicts_Over_Social_Media"
+    ]
+    df = df[features].dropna()
+
+    # Entrenar modelo y obtener datos escalados y el scaler
+    model, _, X_scaled, scaler = train_kmeans_model(df, n_clusters)
+
+    # Obtener los puntos del dataset para graficar
     df_plot = pd.DataFrame(X_scaled[:, :2], columns=["x", "y"])
     df_plot["cluster"] = model.labels_
-
-    # Empaquetar los puntos como lista de objetos para el frontend
     points = df_plot.to_dict(orient="records")
 
+    # Preparar los datos del usuario
+    user_values = [[
+        float(user_data.get("age", 0)),
+        float(user_data.get("social_media_usage", 0)),
+        float(user_data.get("sleep_hours_per_night", 0)),
+        float(user_data.get("conflicts_over_social_media", 0))
+    ]]
+
+    # Escalar los datos del usuario con el scaler previamente ajustado
+    user_scaled = scaler.transform(user_values)
+
+    # Obtener el clúster del usuario
+    user_cluster = int(model.predict(user_scaled)[0])
+
+    # Coordenadas del usuario (solo x, y de los 2 primeros componentes)
+    user_point = {
+        "x": float(user_scaled[0][0]),
+        "y": float(user_scaled[0][1]),
+        "cluster": user_cluster
+    }
+
+    # Respuesta completa
     return {
         "clusters": n_clusters,
-        "features_used": columns[:2],
+        "features_used": features[:2],
         "points": points,
+        "user_point": user_point,
         "label": f"Clustering KMeans con {n_clusters} grupos"
     }
+
+
+

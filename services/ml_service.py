@@ -202,17 +202,23 @@ def train_decision_tree_model(df, target_column):
 
 #Clustering
 def train_kmeans_model(df, n_clusters=3):
-    """
-    Aplica KMeans clustering sobre variables numéricas del dataset.
-    """
-    numeric_df = df.select_dtypes(include=['number']).drop(columns=["Student_ID"], errors="ignore")
-    if numeric_df.empty:
-        raise ValueError("No hay columnas numéricas para clustering.")
+    from sklearn.cluster import KMeans
+    from sklearn.preprocessing import StandardScaler
+
+    features = [
+        "Age",
+        "Avg_Daily_Usage_Hours",
+        "Sleep_Hours_Per_Night",
+        "Conflicts_Over_Social_Media"
+    ]
+
+    df = df.dropna(subset=features)
+    X = df[features]
 
     scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(numeric_df)
+    X_scaled = scaler.fit_transform(X)
 
-    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-    kmeans.fit(X_scaled)
+    model = KMeans(n_clusters=n_clusters, random_state=42)
+    model.fit(X_scaled)
 
-    return kmeans, numeric_df.columns.tolist(), X_scaled
+    return model, features, X_scaled, scaler

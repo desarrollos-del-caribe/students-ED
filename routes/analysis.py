@@ -116,14 +116,16 @@ def tree_visualization():
         return jsonify({"error": f"Error generando el árbol: {str(e)}"}), 500
 
 #Clustering
-@analysis_bp.route('/kmeans-clustering', methods=['GET'])
+@analysis_bp.route('/kmeans-clustering', methods=['POST'])
 def kmeans_visualization():
     try:
+        user_data = request.get_json()
         n_clusters = int(request.args.get("clusters", 3))
-        data = run_kmeans_clustering(n_clusters)
+        data = run_kmeans_clustering(user_data, n_clusters)
         return jsonify(data), 200
     except Exception as e:
         return jsonify({"error": f"Error en clustering: {str(e)}"}), 500
+
      
 #Mapa de calor
 @analysis_bp.route('/correlation-heatmap', methods=['GET'])
