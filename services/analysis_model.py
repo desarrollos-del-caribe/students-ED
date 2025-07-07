@@ -159,9 +159,34 @@ def predict_academic_impact(user_data):
         input_scaled = scaler.transform(input_df)
         prediction = model.predict(input_scaled)[0]
 
+         # Datos para graficar
+        df = load_dataset()
+        df = df[[
+            "Avg_Daily_Usage_Hours",
+            "Sleep_Hours_Per_Night",
+            "Conflicts_Over_Social_Media",
+            "Affects_Academic_Performance"
+        ]]
+
+        dataset_points = [
+            {
+                "x": float(row["Avg_Daily_Usage_Hours"]),
+                "y": float(row["Sleep_Hours_Per_Night"]),
+                "label": int(row["Affects_Academic_Performance"])
+            }
+            for _, row in df.iterrows()
+        ]
+
+        user_point = {
+            "x": usage,
+            "y": sleep
+        }
+
         return {
             "affects_academic_performance": int(prediction),
-            "academic_impact_classification": classify_academic_impact(int(prediction))
+            "academic_impact_classification": classify_academic_impact(int(prediction)),
+            "user_point": user_point,
+            "dataset_points": dataset_points[:100]
         }
 
     except Exception as e:
