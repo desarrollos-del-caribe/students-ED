@@ -3,6 +3,7 @@ from services.analysis_model import (predict_sleep_hours, academic_performance_r
 addiction_by_country, social_media_addiction_risk, visualize_decision_tree,
 run_kmeans_clustering, predict_academic_impact, plot_correlation_heatmap, analyze_user
 )
+from services.excel_service import load_dataset
 
 analysis_bp = Blueprint('analysis', __name__, url_prefix='/api/models')
 
@@ -115,40 +116,30 @@ def predict_addiction_risk():
 #Árbol de decisión
 @analysis_bp.route('/tree-visualization', methods=['GET'])
 def tree_visualization():
-    """
-    Visualiza árbol de decisión para un target (adicción o rendimiento).
-    Parámetro: ?target=Addicted_Score o Affects_Academic_Performance
-    """
     try:
         target = request.args.get("target", "Addicted_Score")
-        image_url = visualize_decision_tree(target)
-        return jsonify({"graph_url": image_url}), 200
+        data = visualize_decision_tree(target)
+        return jsonify(data), 200
     except Exception as e:
         return jsonify({"error": f"Error generando el árbol: {str(e)}"}), 500
 
 #Clustering
 @analysis_bp.route('/kmeans-clustering', methods=['GET'])
 def kmeans_visualization():
-    """
-    Visualiza agrupación de estudiantes por KMeans.
-    Parámetro opcional: ?clusters=3
-    """
     try:
         n_clusters = int(request.args.get("clusters", 3))
-        image_url = run_kmeans_clustering(n_clusters)
-        return jsonify({"graph_url": image_url}), 200
+        data = run_kmeans_clustering(n_clusters)
+        return jsonify(data), 200
     except Exception as e:
         return jsonify({"error": f"Error en clustering: {str(e)}"}), 500
      
 #Mapa de calor
 @analysis_bp.route('/correlation-heatmap', methods=['GET'])
 def get_correlation_heatmap():
-    """
-    Muestra un mapa de calor de correlación entre variables numéricas.
-    """
     try:
-        image_url = plot_correlation_heatmap()
-        return jsonify({"graph_url": image_url}), 200
+        df = load_dataset()
+        graph_data = plot_correlation_heatmap(df)
+        return jsonify({"graph_data": graph_data}), 200
     except Exception as e:
         return jsonify({"error": f"Error generando el mapa de calor: {str(e)}"}), 500
 

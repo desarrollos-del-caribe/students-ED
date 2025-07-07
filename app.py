@@ -8,6 +8,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Importar rutas nuevas
 from routes.analysis import analysis_bp
+from routes.catalogs import catalogs_bp
 
 # Crear la aplicación Flask
 app = Flask(__name__)
@@ -32,6 +33,7 @@ limiter = Limiter(
 
 # Registrar blueprints
 app.register_blueprint(analysis_bp)
+app.register_blueprint(catalogs_bp)
 
 # Crear directorios necesarios al iniciar
 def ensure_directories():
@@ -50,6 +52,7 @@ def api_home():
         "endpoints": {
             "users": "/api/users",
             "models": "/api/models", 
+            "catalogs": "/api/catalogs",
             "analysis": "/api/analyze",
             "predictions": "/api/predictions",
             "visualizations": "/api/visualizations"
@@ -76,7 +79,8 @@ def not_found(error):
         'message': 'La ruta solicitada no existe',
         'available_endpoints': [
             '/api',
-            '/api/models'
+            '/api/models',
+            '/api/catalogs',
         ]
     }), 404
 
