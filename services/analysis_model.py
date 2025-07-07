@@ -1,68 +1,103 @@
 # Predicciones
 import pandas as pd
 from .excel_service import load_dataset
-from .ml_service import train_mental_health_model, train_sleep_prediction_model, train_academic_impact_model, train_academic_performance_risk_model, train_social_media_addiction_model, train_decision_tree_model, train_kmeans_model
-from utils.helpers import save_plot_image_with_timestamp, clean_old_graphs
+from .ml_service import (get_cached_sleep_model, get_cached_academic_model, train_academic_performance_risk_model, 
+train_social_media_addiction_model, train_decision_tree_model, train_kmeans_model)
+
+from utils.helpers import (save_plot_image_with_timestamp, clean_old_graphs, calculate_addicted_score, 
+calculate_affects_academic, calculate_mental_health_score, classify_mental_health,
+classify_addiction_score, classify_academic_impact, classify_platform_risk, 
+classify_social_media_usage, classify_conflicts, get_personal_recommendations, classify_sleep_quality
+)
+
 from .graph_service import plot_mental_health_comparison, plot_addiction_risk_bar, plot_student_performance_comparison, plot_academic_risk_pie, plot_addiction_by_country, plot_correlation_heatmap
 import seaborn as sns
 import logging
 import matplotlib.pyplot as plt
 from sklearn.tree import plot_tree
 import os
+from typing import Dict, Any
 
 GRAPH_DIR = os.path.join(os.path.dirname(__file__), '../static/graphs')
 
 logger = logging.getLogger(__name__)
 
-def predict_mental_health_score(usage_hours, sleep_hours, addicted_score, conflicts_score, academic_impact):
+def analyze_user(user_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Recibe los datos del usuario y genera un análisis completo:
+    - Puntajes (adicción, salud mental, afectación académica)
+    - Clasificaciones descriptivas
+    - Recomendaciones personalizadas
+    """
+
     try:
-        df = load_dataset()
-        model, scaler = train_mental_health_model(df)
+        # Extracción segura
+        usage = float(user_data.get("daily_usage", 0))
+        sleep = float(user_data.get("sleep_hours", 0))
+        conflicts = int(user_data.get("conflicts", 0))
+        platform = user_data.get("platform", "")
 
-        input_df = pd.DataFrame([{
-            "Avg_Daily_Usage_Hours": usage_hours,
-            "Sleep_Hours_Per_Night": sleep_hours,
-            "Addicted_Score": addicted_score,
-            "Conflicts_Over_Social_Media": conflicts_score,
-            "Affects_Academic_Performance": academic_impact
-        }])
+        # Cálculos
+        addicted_score = calculate_addicted_score(usage, conflicts)
+        affects_academic = calculate_affects_academic(addicted_score, sleep)
+        mental_score = calculate_mental_health_score(usage, sleep, conflicts, addicted_score, affects_academic)
 
-        input_scaled = scaler.transform(input_df)
-        prediction = model.predict(input_scaled)[0]
+        # Clasificaciones
+        addiction_level = classify_addiction_score(addicted_score)
+        sleep_quality = classify_sleep_quality(sleep)
+        academic_impact = classify_academic_impact(affects_academic)
+        mental_health_desc = classify_mental_health(mental_score)
+        platform_risk = classify_platform_risk(platform)
+        usage_risk = classify_social_media_usage(usage)
+        conflict_level = classify_conflicts(conflicts)
 
-        dataset_stats = {
-            "avg_usage_hours": round(float(df["Avg_Daily_Usage_Hours"].mean()), 2),
-            "avg_sleep_hours": round(float(df["Sleep_Hours_Per_Night"].mean()), 2),
-            "avg_addicted_score": round(float(df["Addicted_Score"].mean()), 2),
-            "avg_conflicts_score": round(float(df["Conflicts_Over_Social_Media"].mean()), 2),
-            "avg_academic_impact": round(float(df["Affects_Academic_Performance"].mean()), 2),
-            "avg_mental_health_score": round(float(df["Mental_Health_Score"].mean()), 2)
-        }
-
-        graph_url = plot_mental_health_comparison(prediction, dataset_stats["avg_mental_health_score"])
+        # Recomendaciones personalizadas
+        recommendations_data = get_personal_recommendations({
+            "addicted_score": addicted_score,
+            "sleep_hours": sleep,
+            "affects_academic": affects_academic,
+            "usage_hours": usage,
+            "conflicts": conflicts,
+            "platform": platform
+        })
 
         return {
-            "predicted_score": round(float(prediction), 2),
-            "dataset_stats": dataset_stats,
-            "graph_url": graph_url
+            "addicted_score": addicted_score,
+            "mental_health_score": mental_score,
+            "affects_academic_performance": affects_academic,
+            "classifications": {
+                "mental_health": mental_health_desc,
+                "addiction": addiction_level,
+                "sleep": sleep_quality,
+                "academic_impact": academic_impact,
+                "platform": platform_risk,
+                "usage": usage_risk,
+                "conflicts": conflict_level
+            },
+            "recommendations": recommendations_data["recommendations"],
+            "risk_factors": recommendations_data["risk_factors"]
         }
 
     except Exception as e:
-        logger.error(f"Error en predict_mental_health_score: {str(e)}")
-        return {
-            "predicted_score": 0,
-            "dataset_stats": {},
-            "error": str(e)
-        }
+        logger.error(f"Error en analyze_user_data: {str(e)}")
+        return {"error": str(e)}
 
-def predict_sleep_hours(usage_hours):
+# Predecir horas de sueño en base a las horas de uso diario de redes sociales
+def predict_sleep_hours(user_data):
     try:
-        df = load_dataset()
-        model, scaler = train_sleep_prediction_model(df)
+        usage_hours = float(user_data.get("daily_usage", 0))
+        model, scaler = get_cached_sleep_model()
 
         input_df = pd.DataFrame([[usage_hours]], columns=["Avg_Daily_Usage_Hours"])
         input_scaled = scaler.transform(input_df)
         prediction = model.predict(input_scaled)[0]
+
+        # Estadísticas del dataset (opcional)
+        df = load_dataset()
+        df = df[
+            (df["Avg_Daily_Usage_Hours"] >= 1) & (df["Avg_Daily_Usage_Hours"] <= 10) &
+            (df["Sleep_Hours_Per_Night"] >= 3) & (df["Sleep_Hours_Per_Night"] <= 12)
+        ]
 
         dataset_stats = {
             "avg_usage_hours": round(float(df["Avg_Daily_Usage_Hours"].mean()), 2),
@@ -72,7 +107,11 @@ def predict_sleep_hours(usage_hours):
         return {
             "predicted_sleep_hours": round(float(prediction), 2),
             "dataset_stats": dataset_stats,
-            "message": f"Con un uso diario de {usage_hours} horas, se estima que duermes aproximadamente {round(float(prediction), 2)} horas por noche."
+            "message": (
+                f"Con un uso diario de {usage_hours} horas, se estima que duermes aproximadamente "
+                f"{round(float(prediction), 2)} horas por noche."
+            ),
+            "sleep_classification": classify_sleep_quality(prediction)
         }
 
     except Exception as e:
@@ -83,62 +122,35 @@ def predict_sleep_hours(usage_hours):
             "error": str(e)
         }
 
-def predict_academic_impact(usage_hours, sleep_hours, mental_health_score):
+def predict_academic_impact(user_data):
+    """
+    Usa el modelo de regresión logística entrenado para predecir si el rendimiento académico
+    del usuario se ve afectado por su estilo de vida digital.
+    """
     try:
-        df = load_dataset()
-        model, scaler = train_academic_impact_model(df)
+        usage = float(user_data.get("daily_usage", 0))
+        sleep = float(user_data.get("sleep_hours", 0))
+        conflicts = int(user_data.get("conflicts", 0))
 
-        input_df = pd.DataFrame([{
-            "Avg_Daily_Usage_Hours": usage_hours,
-            "Sleep_Hours_Per_Night": sleep_hours,
-            "Mental_Health_Score": mental_health_score
-        }])
-
+        model, scaler = get_cached_academic_model()
+        input_df = pd.DataFrame([[usage, sleep, conflicts]], columns=[
+            "Avg_Daily_Usage_Hours",
+            "Sleep_Hours_Per_Night",
+            "Conflicts_Over_Social_Media"
+        ])
         input_scaled = scaler.transform(input_df)
         prediction = model.predict(input_scaled)[0]
-        probability = model.predict_proba(input_scaled)[0][1]
-
-        dataset_stats = {
-            "avg_usage_hours": round(float(df["Avg_Daily_Usage_Hours"].mean()), 2),
-            "avg_sleep_hours": round(float(df["Sleep_Hours_Per_Night"].mean()), 2),
-            "avg_mental_health_score": round(float(df["Mental_Health_Score"].mean()), 2)
-        }
 
         return {
-            "impact": "Sí" if prediction == 1 else "No",
-            "probability": round(float(probability), 4),
-            "dataset_stats": dataset_stats,
-            "message": (
-                "Según tus hábitos, es probable que tu rendimiento académico "
-                + ("esté siendo afectado." if prediction == 1 else "no esté siendo afectado significativamente.")
-            )
+            "affects_academic_performance": int(prediction),
+            "academic_impact_classification": classify_academic_impact(int(prediction))
         }
 
     except Exception as e:
         logger.error(f"Error en predict_academic_impact: {str(e)}")
         return {
-            "impact": "No",
-            "probability": 0,
-            "dataset_stats": {},
-            "error": str(e)
-        }
-
-        return {
-            "impact": "Sí" if prediction == 1 else "No",
-            "probability": round(float(probability), 4),
-            "dataset_stats": dataset_stats,
-            "message": (
-                "Según tus hábitos, es probable que tu rendimiento académico "
-                + ("esté siendo afectado." if prediction == 1 else "no esté siendo afectado significativamente.")
-            )
-        }
-
-    except Exception as e:
-        logger.error(f"Error en predict_academic_impact: {str(e)}")
-        return {
-            "impact": "No",
-            "probability": 0,
-            "dataset_stats": {},
+            "affects_academic_performance": 0,
+            "academic_impact_classification": "No se pudo predecir el impacto académico.",
             "error": str(e)
         }
         
