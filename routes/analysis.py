@@ -7,6 +7,33 @@ from services.excel_service import load_dataset
 
 analysis_bp = Blueprint('analysis', __name__, url_prefix='/api/models')
 
+@analysis_bp.route('/mental-health', methods=['POST'])
+def predict_mental_health():
+    """
+    Endpoint para predecir el Mental_Health_Score de un usuario según sus hábitos.
+    """
+    try:
+        data = request.get_json()
+
+        # Validar campos requeridos
+        required_fields = ["usage_hours", "sleep_hours", "addicted_score", "conflicts_score", "academic_impact"]
+        if not all(field in data for field in required_fields):
+            return jsonify({"error": "Faltan campos requeridos en la solicitud."}), 400
+
+        prediction = predict_mental_health_score(
+            usage_hours=data["usage_hours"],
+            sleep_hours=data["sleep_hours"],
+            addicted_score=data["addicted_score"],
+            conflicts_score=data["conflicts_score"],
+            academic_impact=data["academic_impact"]
+        )
+
+        return jsonify(prediction), 200
+
+    except Exception as e:
+        print(f"Error en /predict/mental-health: {str(e)}")
+        return jsonify({"error": f"Error al predecir salud mental: {str(e)}"}), 500
+
 @analysis_bp.route('/sleep-prediction', methods=['POST'])
 def predict_sleep():
     """
