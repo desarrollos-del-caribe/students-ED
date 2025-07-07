@@ -39,12 +39,12 @@ def predict_mental_health_score(usage_hours, sleep_hours, addicted_score, confli
             "avg_mental_health_score": round(float(df["Mental_Health_Score"].mean()), 2)
         }
 
-        graph_url = plot_mental_health_comparison(prediction, dataset_stats["avg_mental_health_score"])
+        graph_data = plot_mental_health_comparison(prediction, dataset_stats["avg_mental_health_score"])
 
         return {
             "predicted_score": round(float(prediction), 2),
             "dataset_stats": dataset_stats,
-            "graph_url": graph_url
+            "graph_data": graph_data
         }
 
     except Exception as e:
@@ -166,13 +166,13 @@ def academic_performance_risk(usage_hours, sleep_hours, mental_health_score):
             "avg_academic_impact": round(float(df["Affects_Academic_Performance"].mean()), 2)
         }
 
-        graph_url = plot_academic_risk_pie(probability)
+        graph_data = plot_academic_risk_pie(probability)
 
         return {
             "risk": "Alto" if prediction == 1 else "Bajo",
             "probability": round(float(probability), 4),
             "dataset_stats": dataset_stats,
-            "graph_url": graph_url
+            "graph_data": graph_data
         }
 
     except Exception as e:
@@ -185,6 +185,8 @@ def academic_performance_risk(usage_hours, sleep_hours, mental_health_score):
         }
  
 #Usa los mdoelos de social_media_addiction_risk y academic_performance_risk para devolver predicciones  
+#Se convirtieron valores del dataframe a tipos nativos python para evitar errores de serialización 
+#se valido que sean compatibles con jsonify y se agregaron valores por defecto para evitar problemas de KeyError.
 def student_performance_prediction(student_id):
     try:
         df = load_dataset()
@@ -196,11 +198,12 @@ def student_performance_prediction(student_id):
         if student_data.empty:
             return {"error": f"Estudiante con ID {student_id} no encontrado"}
 
-        usage = student_data["Avg_Daily_Usage_Hours"].iloc[0]
-        addicted_score = student_data["Addicted_Score"].iloc[0]
-        mental_health = student_data["Mental_Health_Score"].iloc[0]
-        conflicts = student_data["Conflicts_Over_Social_Media"].iloc[0]
-        sleep = student_data["Sleep_Hours_Per_Night"].iloc[0]
+        usage = float(student_data["Avg_Daily_Usage_Hours"].iloc[0])
+        addicted_score = float(student_data["Addicted_Score"].iloc[0])
+        mental_health = float(student_data["Mental_Health_Score"].iloc[0])
+        conflicts = float(student_data["Conflicts_Over_Social_Media"].iloc[0])
+        sleep = float(student_data["Sleep_Hours_Per_Night"].iloc[0])
+        academic_impact = float(student_data["Affects_Academic_Performance"].iloc[0])
 
         addiction_pred = social_media_addiction_risk(usage, addicted_score, mental_health, conflicts)
         academic_pred = academic_performance_risk(usage, sleep, mental_health)
@@ -208,28 +211,37 @@ def student_performance_prediction(student_id):
         dataset_stats = {
             "avg_addicted_score": round(float(df["Addicted_Score"].mean()), 2),
             "avg_academic_impact": round(float(df["Affects_Academic_Performance"].mean()), 2),
-            "student_addicted_score": round(float(addicted_score), 2),
-            "student_academic_impact": round(float(student_data["Affects_Academic_Performance"].iloc[0]), 2)
+            "student_addicted_score": round(addicted_score, 2),
+            "student_academic_impact": round(academic_impact, 2)
         }
 
-        graph_url = plot_student_performance_comparison(
+        graph_data = plot_student_performance_comparison(
             addicted_score, dataset_stats["avg_addicted_score"],
-            dataset_stats["student_academic_impact"], dataset_stats["avg_academic_impact"]
+            academic_impact, dataset_stats["avg_academic_impact"]
         )
 
         return {
-            "id": student_id,
-            "addiction_risk": addiction_pred["risk"],
-            "addiction_probabilities": addiction_pred["probabilities"],
-            "academic_risk": academic_pred["risk"],
-            "academic_risk_probability": academic_pred["probability"],
-            "dataset_stats": dataset_stats,
-            "graph_url": graph_url
+            "id": int(student_id),
+            "addiction_risk": str(addiction_pred["risk"]),
+            "addiction_probabilities": {
+                "No adicción": float(addiction_pred["probabilities"].get("No adicción", 0)),
+                "Adicción": float(addiction_pred["probabilities"].get("Adicción", 0))
+            },
+            "academic_risk": str(academic_pred["risk"]),
+            "academic_risk_probability": float(academic_pred["probability"]),
+            "dataset_stats": {
+                "avg_addicted_score": float(dataset_stats["avg_addicted_score"]),
+                "avg_academic_impact": float(dataset_stats["avg_academic_impact"]),
+                "student_addicted_score": float(dataset_stats["student_addicted_score"]),
+                "student_academic_impact": float(dataset_stats["student_academic_impact"])
+            },
+            "graph_data": graph_data
         }
 
     except Exception as e:
         logger.error(f"Error en student_performance_prediction: {str(e)}")
         return {"error": str(e)}
+
     
 #Calcula y devuelve estadisticas de adicción por país        
 def addiction_by_country(min_students=5):
@@ -260,12 +272,12 @@ def addiction_by_country(min_students=5):
             "avg_usage_hours": round(float(df["Avg_Daily_Usage_Hours"].mean()), 2)
         }
 
-        graph_url = plot_addiction_by_country(result["countries"], result["avg_addicted_scores"])
+        graph_data = plot_addiction_by_country(result["countries"], result["avg_addicted_scores"])
 
         return {
             "country_data": result,
             "dataset_stats": dataset_stats,
-            "graph_url": graph_url
+            "graph_data": graph_data
         }
 
     except Exception as e:
@@ -290,7 +302,7 @@ def social_media_addiction_risk(usage_hours, addicted_score, mental_health_score
         prediction = model.predict(input_scaled)[0]
         probabilities = model.predict_proba(input_scaled)[0]
 
-        graph_url = plot_addiction_risk_bar(probabilities[0], probabilities[1])
+        graph_data = plot_addiction_risk_bar(probabilities[0], probabilities[1])
 
         return {
             "risk": "Alto" if prediction == 1 else "Bajo",
@@ -298,7 +310,7 @@ def social_media_addiction_risk(usage_hours, addicted_score, mental_health_score
                 "No adicción": round(probabilities[0], 3),
                 "Adicción": round(probabilities[1], 3)
             },
-            "graph_url": graph_url
+            "graph_data": graph_data
         }
 
     except Exception as e:
@@ -314,24 +326,31 @@ def visualize_decision_tree(target_column):
     df = load_dataset()
     model, features = train_decision_tree_model(df, target_column)
 
-    # Graficar
-    plt.figure(figsize=(12, 6))
-    plot_tree(model, feature_names=features, filled=True, class_names=True)
+    # Obtener texto del árbol
+    from sklearn.tree import export_text
+    tree_text = export_text(model, feature_names=features)
 
-    # Limpiar imágenes viejas antes de guardar
-    clean_old_graphs(GRAPH_DIR)
+    return {
+        "tree_text": tree_text,
+        "target": target_column,
+        "label": f"Árbol de decisión para {target_column}"
+    }
 
-    return save_plot_image_with_timestamp(f"tree_{target_column}")
 
 #Clustering
 def run_kmeans_clustering(n_clusters=3):
     df = load_dataset()
     model, columns, X_scaled = train_kmeans_model(df, n_clusters)
 
-    df_plot = pd.DataFrame(X_scaled[:, :2], columns=["Feature1", "Feature2"])
-    df_plot["Cluster"] = model.labels_
+    df_plot = pd.DataFrame(X_scaled[:, :2], columns=["x", "y"])
+    df_plot["cluster"] = model.labels_
 
-    plt.figure(figsize=(8, 6))
-    sns.scatterplot(data=df_plot, x="Feature1", y="Feature2", hue="Cluster", palette="Set2")
-    clean_old_graphs(GRAPH_DIR)
-    return save_plot_image_with_timestamp("kmeans_clusters")
+    # Empaquetar los puntos como lista de objetos para el frontend
+    points = df_plot.to_dict(orient="records")
+
+    return {
+        "clusters": n_clusters,
+        "features_used": columns[:2],
+        "points": points,
+        "label": f"Clustering KMeans con {n_clusters} grupos"
+    }
