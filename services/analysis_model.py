@@ -85,7 +85,7 @@ def analyze_user(user_data: Dict[str, Any]) -> Dict[str, Any]:
 # Predecir horas de sueño en base a las horas de uso diario de redes sociales
 def predict_sleep_hours(user_data):
     try:
-        usage_hours = float(user_data.get("daily_usage", 0))
+        usage_hours = float(user_data.get("social_media_usage", 0))
         model, scaler = get_cached_sleep_model()
 
         input_df = pd.DataFrame([[usage_hours]], columns=["Avg_Daily_Usage_Hours"])
