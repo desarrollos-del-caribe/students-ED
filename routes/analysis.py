@@ -33,9 +33,9 @@ def predict_academic_impact_endpoint():
     try:
         data = request.get_json()
         
-        required_fields = ["daily_usage", "sleep_hours", "conflicts"]
+        required_fields = ["social_media_usage", "sleep_hours_per_night", "conflicts_over_social_media"]
         if not all(field in data for field in required_fields):
-            return jsonify({"error": "Faltan campos requeridos: daily_usage, sleep_hours, conflicts"}), 400
+            return jsonify({"error": "Faltan campos requeridos: social_media_usage, sleep_hours_per_night, conflicts_over_social_media"}), 400
 
         # Ejecutar predicción usando el modelo en caché
         result = predict_academic_impact(data)
@@ -52,16 +52,12 @@ def predict_academic_risk():
     Predice el riesgo académico usando horas de uso, sueño y salud mental.
     """
     try:
-        data = request.get_json()
-        required = ["usage_hours", "sleep_hours", "mental_health_score"]
-        if not all(k in data for k in required):
+        user_data = request.get_json()
+        required = ["social_media_usage", "sleep_hours_per_night", "conflicts_over_social_media"]
+        if not all(k in user_data for k in required):
             return jsonify({"error": "Faltan campos requeridos"}), 400
 
-        result = academic_performance_risk(
-            usage_hours=data["usage_hours"],
-            sleep_hours=data["sleep_hours"],
-            mental_health_score=data["mental_health_score"]
-        )
+        result = academic_performance_risk(user_data)
         return jsonify(result), 200
 
     except Exception as e:
@@ -95,18 +91,13 @@ def predict_addiction_risk():
     Endpoint para predecir el riesgo de adicción a redes sociales.
     """
     try:
-        data = request.get_json()
+        user_data = request.get_json()
 
-        required_fields = ["usage_hours", "addicted_score", "mental_health_score", "conflicts_score"]
-        if not all(field in data for field in required_fields):
+        required_fields = ["social_media_usage", "sleep_hours_per_night", "conflicts_over_social_media"]
+        if not all(field in user_data for field in required_fields):
             return jsonify({"error": "Faltan campos requeridos."}), 400
 
-        result = social_media_addiction_risk(
-            usage_hours=data["usage_hours"],
-            addicted_score=data["addicted_score"],
-            mental_health_score=data["mental_health_score"],
-            conflicts_score=data["conflicts_score"]
-        )
+        result = social_media_addiction_risk(user_data)
 
         return jsonify(result), 200
 

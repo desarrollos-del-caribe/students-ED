@@ -32,10 +32,10 @@ def analyze_user(user_data: Dict[str, Any]) -> Dict[str, Any]:
 
     try:
         # Extracción segura
-        usage = float(user_data.get("daily_usage", 0))
-        sleep = float(user_data.get("sleep_hours", 0))
-        conflicts = int(user_data.get("conflicts", 0))
-        platform = user_data.get("platform", "")
+        usage = float(user_data.get("social_media_usage", 0))
+        sleep = float(user_data.get("sleep_hours_per_night", 0))
+        conflicts = int(user_data.get("conflicts_over_social_media", 0))
+        platform = user_data.get("main_platform", "")
 
         # Cálculos
         addicted_score = calculate_addicted_score(usage, conflicts)
@@ -146,9 +146,9 @@ def predict_academic_impact(user_data):
     del usuario se ve afectado por su estilo de vida digital.
     """
     try:
-        usage = float(user_data.get("daily_usage", 0))
-        sleep = float(user_data.get("sleep_hours", 0))
-        conflicts = int(user_data.get("conflicts", 0))
+        usage = float(user_data.get("social_media_usage", 0))
+        sleep = float(user_data.get("sleep_hours_per_night", 0))
+        conflicts = int(user_data.get("conflicts_over_social_media", 0))
 
         model, scaler = get_cached_academic_model()
         input_df = pd.DataFrame([[usage, sleep, conflicts]], columns=[
@@ -174,18 +174,28 @@ def predict_academic_impact(user_data):
         
 #Predecir el riesgo de que el rendimiento academico se vea afectado pos: horas de uso, salud mental y horas de sueño
 #Regresión logística	
-def academic_performance_risk(usage_hours, sleep_hours, mental_health_score):
+def academic_performance_risk(user_data):
     try:
+        # Extracción segura de datos
+        usage = float(user_data.get("social_media_usage", 0))
+        sleep = float(user_data.get("sleep_hours_per_night", 0))
+        conflicts = int(user_data.get("conflicts_over_social_media", 0))
+
+        # Cálculo del puntaje de adicción y salud mental
+        addicted_score = calculate_addicted_score(usage, conflicts)
+        affects_academic = calculate_affects_academic(addicted_score, sleep)
+        mental_score = calculate_mental_health_score(usage, sleep, conflicts, addicted_score, affects_academic)
+        
         df = load_dataset()
         model, scaler = train_academic_performance_risk_model(df)
 
         input_df = pd.DataFrame([{
-            "Avg_Daily_Usage_Hours": usage_hours,
-            "Sleep_Hours_Per_Night": sleep_hours,
-            "Mental_Health_Score": mental_health_score
+            "Avg_Daily_Usage_Hours": usage,
+            "Sleep_Hours_Per_Night": sleep,
+            "Mental_Health_Score": mental_score
         }])
-
         input_scaled = scaler.transform(input_df)
+
         prediction = model.predict(input_scaled)[0]
         probability = model.predict_proba(input_scaled)[0][1]
 
@@ -316,16 +326,26 @@ def addiction_by_country(min_students=5):
 
 #Predice si un estudiante tiene riesgo alto o bajo de adicción según datos
 #Random forest
-def social_media_addiction_risk(usage_hours, addicted_score, mental_health_score, conflicts_score):
+def social_media_addiction_risk(user_data):
     try:
+         # Extraer datos necesarios del usuario
+        usage = float(user_data.get("social_media_usage", 0))
+        sleep = float(user_data.get("sleep_hours_per_night", 0))
+        conflicts = int(user_data.get("conflicts_over_social_media", 0))
+
+        # Calcular puntajes requeridos
+        addicted_score = calculate_addicted_score(usage, conflicts)
+        affects_academic = calculate_affects_academic(addicted_score, sleep)
+        mental_score = calculate_mental_health_score(usage, sleep, conflicts, addicted_score, affects_academic)
+
         df = load_dataset()
         model, scaler = train_social_media_addiction_model(df)
 
         input_df = pd.DataFrame([{
-            "Avg_Daily_Usage_Hours": usage_hours,
+            "Avg_Daily_Usage_Hours": usage,
             "Addicted_Score": addicted_score,
-            "Mental_Health_Score": mental_health_score,
-            "Conflicts_Over_Social_Media": conflicts_score
+            "Mental_Health_Score": mental_score,
+            "Conflicts_Over_Social_Media": conflicts
         }])
 
         input_scaled = scaler.transform(input_df)
