@@ -82,17 +82,19 @@ def analyze_user(user_data: Dict[str, Any]) -> Dict[str, Any]:
         logger.error(f"Error en analyze_user_data: {str(e)}")
         return {"error": str(e)}
 
-# Predecir horas de sueño en base a las horas de uso diario de redes sociales
-def predict_sleep_hours(user_data):
+def predict_sleep_hours(user_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Predice las horas de sueño basadas en el uso de redes sociales.
+    """
     try:
-        usage_hours = float(user_data.get("social_media_usage", 0))
+        social_media_usage = float(user_data.get("social_media_usage", 0))
         model, scaler = get_cached_sleep_model()
 
-        input_df = pd.DataFrame([[usage_hours]], columns=["Avg_Daily_Usage_Hours"])
+        input_df = pd.DataFrame([[social_media_usage]], columns=["Avg_Daily_Usage_Hours"])
         input_scaled = scaler.transform(input_df)
         prediction = model.predict(input_scaled)[0]
 
-        # Estadísticas del dataset (opcional)
+        # Estadísticas del dataset
         df = load_dataset()
         df = df[
             (df["Avg_Daily_Usage_Hours"] >= 1) & (df["Avg_Daily_Usage_Hours"] <= 10) &
@@ -100,26 +102,42 @@ def predict_sleep_hours(user_data):
         ]
 
         dataset_stats = {
-            "avg_usage_hours": round(float(df["Avg_Daily_Usage_Hours"].mean()), 2),
-            "avg_sleep_hours": round(float(df["Sleep_Hours_Per_Night"].mean()), 2)
+            "avg_social_media_usage": round(float(df["Avg_Daily_Usage_Hours"].mean()), 2),
+            "avg_sleep_hours_per_night": round(float(df["Sleep_Hours_Per_Night"].mean()), 2)
+        }
+
+        # Obtener puntos del dataset para el gráfico
+        scatter_points = [
+            {"x": float(row["Avg_Daily_Usage_Hours"]), "y": float(row["Sleep_Hours_Per_Night"])}
+            for _, row in df.iterrows()
+        ]
+
+        # Obtener parámetros de la regresión lineal
+        regression_line = {
+            "slope": float(model.coef_[0]),
+            "intercept": float(model.intercept_)
         }
 
         return {
-            "predicted_sleep_hours": round(float(prediction), 2),
+            "predicted_sleep_hours_per_night": round(float(prediction), 2),
             "dataset_stats": dataset_stats,
             "message": (
-                f"Con un uso diario de {usage_hours} horas, se estima que duermes aproximadamente "
+                f"Con un uso diario de {social_media_usage} horas, se estima que duermes aproximadamente "
                 f"{round(float(prediction), 2)} horas por noche."
             ),
-            "sleep_classification": classify_sleep_quality(prediction)
+            "sleep_classification": classify_sleep_quality(prediction),
+            "scatter_points": scatter_points[:100],  # Limitar a 100 puntos para rendimiento
+            "regression_line": regression_line
         }
 
     except Exception as e:
         logger.error(f"Error en predict_sleep_hours: {str(e)}")
         return {
-            "predicted_sleep_hours": 0,
+            "predicted_sleep_hours_per_night": 0,
             "dataset_stats": {},
-            "error": str(e)
+            "error": str(e),
+            "scatter_points": [],
+            "regression_line": {"slope": 0, "intercept": 0}
         }
 
 def predict_academic_impact(user_data):
