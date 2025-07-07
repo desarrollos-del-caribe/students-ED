@@ -6,68 +6,40 @@ from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier, plot_tre
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score, accuracy_score, classification_report
 from sklearn.preprocessing import StandardScaler, LabelEncoder
+from .excel_service import load_dataset
 
-import matplotlib.pyplot as plt
-import seaborn as sns
-import time
-import os
-
-#Regresion lineal multiple
-def train_mental_health_model(df): 
-    """
-    Entrena un modelo de regresión lineal múltiple para predecir la salud mental
-    a partir del uso de redes sociales y estilo de vida.
-    """
-
-    # Variables predictoras (X) y variable objetivo (y)
-    features = [
-        "Avg_Daily_Usage_Hours",
-        "Sleep_Hours_Per_Night",
-        "Addicted_Score",
-        "Conflicts_Over_Social_Media",
-        "Affects_Academic_Performance"
-    ]
-    target = "Mental_Health_Score"
-
-    # Validar que las columnas existan
-    if not all(col in df.columns for col in features + [target]):
-        raise ValueError("Faltan columnas requeridas para entrenar el modelo de salud mental.")
-
-    X = df[features]
-    y = df[target]
-
-    # Escalado (opcional, pero mejora la convergencia)
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-
-    # Separar datos para entrenamiento y prueba
-    X_train, X_test, y_train, y_test = train_test_split(
-        X_scaled, y, test_size=0.2, random_state=42
-    )
-
-    # Entrenamiento
-    model = LinearRegression()
-    model.fit(X_train, y_train)
-
-    # Evaluación rápida
-    y_pred = model.predict(X_test)
-    mse = mean_squared_error(y_test, y_pred)
-    r2 = r2_score(y_test, y_pred)
-
-    print(f"Entrenamiento completado: MSE = {mse:.2f}, R2 = {r2:.2f}")
-
-    # Retornar el modelo y el scaler (para usar en predicción)
-    return model, scaler
+# Variables de caché
+_cached_sleep_model = None
+_cached_sleep_scaler = None
+_cached_academic_model = None
+_cached_academic_scaler = None
 
 #Regresión lineal simple
-def train_sleep_prediction_model(df): 
+def get_cached_sleep_model():
     """
     Entrena un modelo de regresión lineal simple para predecir las horas de sueño
     en función del uso diario de redes sociales.
     """
-    # Validación
+    global _cached_sleep_model, _cached_sleep_scaler
+
+    if _cached_sleep_model is not None and _cached_sleep_scaler is not None:
+        return _cached_sleep_model, _cached_sleep_scaler
+
+    # Cargar datos
+    df = load_dataset()
+    
+     # Validación
     if not all(col in df.columns for col in ["Avg_Daily_Usage_Hours", "Sleep_Hours_Per_Night"]):
         raise ValueError("Faltan columnas necesarias para entrenar el modelo de sueño.")
+
+    # 🔍 Validación y filtrado
+    df = df[
+        (df["Avg_Daily_Usage_Hours"] >= 1) & (df["Avg_Daily_Usage_Hours"] <= 10) &
+        (df["Sleep_Hours_Per_Night"] >= 3) & (df["Sleep_Hours_Per_Night"] <= 12)
+    ]
+
+    if df.empty:
+        raise ValueError("No hay suficientes datos válidos para entrenar el modelo de sueño.")
 
     X = df[["Avg_Daily_Usage_Hours"]]
     y = df["Sleep_Hours_Per_Night"]
@@ -75,49 +47,68 @@ def train_sleep_prediction_model(df):
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
-    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.8, random_state=42)
 
     model = LinearRegression()
     model.fit(X_train, y_train)
 
-    y_pred = model.predict(X_test)
-    mse = mean_squared_error(y_test, y_pred)
-    r2 = r2_score(y_test, y_pred)
+    # Almacenar en caché
+    _cached_sleep_model = model
+    _cached_sleep_scaler = scaler
 
     return model, scaler
 
 #Regresión logística
-def train_academic_impact_model(df): 
+def get_cached_academic_model():
     """
-    Entrena un modelo de regresión logística para predecir si el uso de redes afecta el rendimiento académico.
+    Entrena y cachea un modelo de regresión logística para predecir si el uso de redes afecta el rendimiento académico.
     """
+    global _cached_academic_model, _cached_academic_scaler
+
+    if _cached_academic_model is not None and _cached_academic_scaler is not None:
+        return _cached_academic_model, _cached_academic_scaler
+
+    df = load_dataset()
+
     required_cols = [
         "Avg_Daily_Usage_Hours",
         "Sleep_Hours_Per_Night",
-        "Mental_Health_Score",
+        "Conflicts_Over_Social_Media",
         "Affects_Academic_Performance"
     ]
-    
+
     if not all(col in df.columns for col in required_cols):
         raise ValueError("Faltan columnas necesarias para entrenar el modelo académico.")
 
-    X = df[["Avg_Daily_Usage_Hours", "Sleep_Hours_Per_Night", "Mental_Health_Score"]]
+    # Limpieza y filtrado simple (opcional)
+    df = df[
+        (df["Avg_Daily_Usage_Hours"] >= 1) &
+        (df["Avg_Daily_Usage_Hours"] <= 10) &
+        (df["Sleep_Hours_Per_Night"] >= 3) &
+        (df["Sleep_Hours_Per_Night"] <= 12) &
+        (df["Conflicts_Over_Social_Media"] >= 0)
+    ]
+
+    if df.empty:
+        raise ValueError("No hay suficientes datos válidos para entrenar el modelo académico.")
+
+    X = df[["Avg_Daily_Usage_Hours", "Sleep_Hours_Per_Night", "Conflicts_Over_Social_Media"]]
     y = df["Affects_Academic_Performance"]
 
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X_scaled, y, test_size=0.2, random_state=42
-    )
+    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.8, random_state=42)
 
     model = LogisticRegression(max_iter=1000)
     model.fit(X_train, y_train)
 
-    y_pred = model.predict(X_test)
-    acc = accuracy_score(y_test, y_pred)
+    accuracy = accuracy_score(y_test, model.predict(X_test))
 
-    print(f"📊 Modelo académico entrenado: Accuracy = {acc:.2f}")
+    # Cachear
+    _cached_academic_model = model
+    _cached_academic_scaler = scaler
+
     return model, scaler
 
 #Modelo de regresión logistica

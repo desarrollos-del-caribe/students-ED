@@ -1,35 +1,11 @@
 from flask import Blueprint, request, jsonify
-from services.analysis_model import predict_mental_health_score, predict_sleep_hours, academic_performance_risk, student_performance_prediction, addiction_by_country, social_media_addiction_risk, visualize_decision_tree, run_kmeans_clustering, predict_academic_impact, plot_correlation_heatmap
+from services.analysis_model import (predict_sleep_hours, academic_performance_risk, student_performance_prediction, 
+addiction_by_country, social_media_addiction_risk, visualize_decision_tree,
+run_kmeans_clustering, predict_academic_impact, plot_correlation_heatmap, analyze_user
+)
 from services.excel_service import load_dataset
 
 analysis_bp = Blueprint('analysis', __name__, url_prefix='/api/models')
-
-@analysis_bp.route('/mental-health', methods=['POST'])
-def predict_mental_health():
-    """
-    Endpoint para predecir el Mental_Health_Score de un usuario según sus hábitos.
-    """
-    try:
-        data = request.get_json()
-
-        # Validar campos requeridos
-        required_fields = ["usage_hours", "sleep_hours", "addicted_score", "conflicts_score", "academic_impact"]
-        if not all(field in data for field in required_fields):
-            return jsonify({"error": "Faltan campos requeridos en la solicitud."}), 400
-
-        prediction = predict_mental_health_score(
-            usage_hours=data["usage_hours"],
-            sleep_hours=data["sleep_hours"],
-            addicted_score=data["addicted_score"],
-            conflicts_score=data["conflicts_score"],
-            academic_impact=data["academic_impact"]
-        )
-
-        return jsonify(prediction), 200
-
-    except Exception as e:
-        print(f"Error en /predict/mental-health: {str(e)}")
-        return jsonify({"error": f"Error al predecir salud mental: {str(e)}"}), 500
 
 @analysis_bp.route('/sleep-prediction', methods=['POST'])
 def predict_sleep():
@@ -38,10 +14,10 @@ def predict_sleep():
     """
     try:
         data = request.get_json()
-        if "usage_hours" not in data:
-            return jsonify({"error": "El campo 'usage_hours' es obligatorio"}), 400
+        if "daily_usage" not in data:
+            return jsonify({"error": "El campo 'daily_usage' es obligatorio"}), 400
 
-        result = predict_sleep_hours(data["usage_hours"])
+        result = predict_sleep_hours(data)
         return jsonify(result), 200
 
     except Exception as e:
@@ -55,19 +31,17 @@ def predict_academic_impact_endpoint():
     """
     try:
         data = request.get_json()
-        required = ["usage_hours", "sleep_hours", "mental_health_score"]
-        if not all(k in data for k in required):
-            return jsonify({"error": "Faltan campos requeridos"}), 400
+        
+        required_fields = ["daily_usage", "sleep_hours", "conflicts"]
+        if not all(field in data for field in required_fields):
+            return jsonify({"error": "Faltan campos requeridos: daily_usage, sleep_hours, conflicts"}), 400
 
-        result = predict_academic_impact(
-            usage_hours=data["usage_hours"],
-            sleep_hours=data["sleep_hours"],
-            mental_health_score=data["mental_health_score"]
-        )
+        # Ejecutar predicción usando el modelo en caché
+        result = predict_academic_impact(data)
+
         return jsonify(result), 200
 
     except Exception as e:
-        print(f"Error en /academic-impact: {str(e)}")
         return jsonify({"error": "Error al predecir impacto académico"}), 500
 
 #Predecir el riesgo de que el rendimiento academico se vea afectado pos: horas de uso, salud mental y horas de sueño
@@ -168,3 +142,10 @@ def get_correlation_heatmap():
         return jsonify({"graph_data": graph_data}), 200
     except Exception as e:
         return jsonify({"error": f"Error generando el mapa de calor: {str(e)}"}), 500
+
+# Calcular salud mental
+@analysis_bp.route("/analyze-user", methods=["POST"])
+def analyze_mental_route():
+    user_data = request.get_json()
+    result = analyze_user(user_data)
+    return jsonify(result)

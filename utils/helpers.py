@@ -4,7 +4,6 @@ from datetime import datetime
 import json
 from typing import Dict, Any, List
 import logging
-
 import os
 import time
 import matplotlib.pyplot as plt
@@ -46,17 +45,6 @@ def clean_old_graphs(directory, max_age_seconds=300):
 
     return deleted
 
-def setup_logging(log_file: str = "app.log"):
-    """Configurar logging para la aplicación"""
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler()
-        ]
-    )
-
 def safe_float(value: Any, default: float = 0.0) -> float:
     """Convertir valor a float de forma segura"""
     try:
@@ -81,17 +69,6 @@ def safe_bool(value: Any, default: bool = False) -> bool:
         return bool(value)
     return default
 
-def format_timestamp(timestamp: str = None) -> str:
-    """Formatear timestamp para display"""
-    if not timestamp:
-        timestamp = datetime.now().isoformat()
-    
-    try:
-        dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-        return dt.strftime('%Y-%m-%d %H:%M:%S')
-    except:
-        return timestamp
-
 def calculate_correlation(data: pd.DataFrame, col1: str, col2: str) -> float:
     """Calcular correlación entre dos columnas"""
     try:
@@ -101,209 +78,196 @@ def calculate_correlation(data: pd.DataFrame, col1: str, col2: str) -> float:
         pass
     return 0.0
 
-def get_performance_category(score: float) -> str:
-    """Categorizar rendimiento académico"""
-    if score >= 90:
-        return "Excelente"
-    elif score >= 80:
-        return "Bueno"
-    elif score >= 70:
-        return "Regular"
-    elif score >= 60:
-        return "Deficiente"
-    else:
-        return "Muy Deficiente"
+def calculate_addicted_score(usage_hours, conflicts):
+    """
+    Calcula el nivel de adicción a redes sociales.
+    Usa una fórmula simple basada en uso diario y conflictos.
 
-def get_social_media_risk_level(usage_hours: int) -> str:
-    """Determinar nivel de riesgo por uso de redes sociales"""
-    if usage_hours <= 2:
-        return "Bajo"
-    elif usage_hours <= 4:
-        return "Medio-Bajo"
-    elif usage_hours <= 6:
-        return "Medio"
-    elif usage_hours <= 8:
-        return "Medio-Alto"
-    else:
-        return "Alto"
+    Retorna un puntaje entre 0 y 10.
+    """
+    score = usage_hours * 1.5 + conflicts * 1.2
+    return min(10, round(score, 2))
 
-def generate_user_insights(user_data: Dict) -> List[str]:
-    """Generar insights sobre un usuario"""
-    insights = []
-    
-    # Análisis de rendimiento
-    performance = safe_float(user_data.get('academic_performance', 0))
-    performance_cat = get_performance_category(performance)
-    insights.append(f"Rendimiento académico: {performance_cat} ({performance:.1f}%)")
-    
-    # Análisis de uso de redes sociales
-    social_usage = safe_int(user_data.get('social_media_usage', 0))
-    risk_level = get_social_media_risk_level(social_usage)
-    insights.append(f"Riesgo por redes sociales: {risk_level} ({social_usage} horas/día)")
-    
-    # Análisis de horas de estudio
-    study_hours = safe_int(user_data.get('study_hours', 0))
-    if study_hours < 15:
-        insights.append("Horas de estudio por debajo del promedio recomendado")
-    elif study_hours > 40:
-        insights.append("Dedicación excepcional a los estudios")
+def calculate_affects_academic(addicted_score, sleep_hours):
+    """
+    Evalúa si el usuario presenta afectación en su rendimiento académico.
+    Si tiene alta adicción (>6) o duerme poco (<5h), se considera afectado.
+
+    Retorna 1 (sí afecta) o 0 (no afecta).
+    """
+    return 1 if addicted_score > 6 or sleep_hours < 5 else 0
+
+def calculate_mental_health_score(usage_hours, sleep_hours, conflicts, addicted_score, affects_academic):
+    """
+    Calcula un puntaje general de salud mental (escala de 1 a 10).
+    Penaliza el uso excesivo, conflictos y falta de sueño. Premia buenos hábitos.
+
+    Retorna el puntaje como número entre 1 y 10.
+    """
+    # Puntaje base sobre 100
+    score = 100
+    score -= usage_hours * 5
+    score += sleep_hours * 4
+    score -= conflicts * 3
+    score -= addicted_score * 3
+    if affects_academic:
+        score -= 10
+
+    score = max(0, min(100, round(score, 2)))
+
+    # Escalar el puntaje de 0-100 a 1-10
+    mental_score = round((score / 100) * 9 + 1, 2)
+    return mental_score
+
+def classify_mental_health(score):
+    """
+    Clasifica la salud mental en base al puntaje (1 a 10).
+    Retorna una descripción textual amigable y útil.
+    """
+    msg = f"Tu puntaje de salud mental es {score}. "
+    if score >= 8:
+        return msg + "Tienes una excelente salud mental. Continúa con tus hábitos positivos."
+    elif score >= 6:
+        return msg + "Tu salud mental es buena, aunque podrías mejorar algunos aspectos."
+    elif score >= 4:
+        return msg + "Tu salud mental es moderada. Considera reducir el uso de redes sociales y mejorar tu descanso."
     else:
-        insights.append("Horas de estudio en rango normal")
-    
-    # Análisis de plataforma principal
-    platform = user_data.get('main_platform', '')
-    platform_insights = {
-        'Instagram': 'Plataforma visual que puede ser distrayente',
-        'TikTok': 'Contenido rápido que puede afectar la concentración',
-        'YouTube': 'Plataforma con potencial educativo',
-        'LinkedIn': 'Plataforma profesional, menor riesgo académico',
-        'Facebook': 'Red social tradicional con riesgo medio',
-        'Twitter': 'Información rápida, puede ser útil o distrayente'
+        return msg + "Tu salud mental parece baja. Sería bueno hablar con alguien y cuidar tu bienestar."
+
+def classify_sleep_quality(hours: float) -> str:
+    """Clasifica las horas de sueño con mensajes descriptivos"""
+    msg = f"Registraste {hours} horas de sueño por noche. "
+    if hours >= 8:
+        return msg + "Tus horas de sueño son excelentes. Mantén ese buen hábito para cuidar tu salud física y mental."
+    elif hours >= 6.5:
+        return msg + "Duermes una cantidad aceptable, pero podrías beneficiarte de un poco más de descanso cada noche."
+    elif hours >= 5:
+        return msg +"Tus horas de sueño son bajas. Trata de dormir más para mejorar tu concentración y bienestar general."
+    else:
+        return "Tus horas de sueño son muy bajas. Esto puede afectar seriamente tu salud y desempeño académico. Considera establecer una rutina de descanso más saludable."
+
+def classify_platform_risk(platform: str) -> str:
+    """Clasifica el riesgo potencial de la plataforma más usada."""
+    risks = {
+        'Instagram': "Es una plataforma visual que puede fomentar la comparación social. Úsala con moderación.",
+        'TikTok': "Contenido muy rápido y adictivo. Puede afectar tu atención si se usa en exceso.",
+        'Facebook': "Red tradicional. Su impacto depende del tipo de contenido que consumes.",
+        'YouTube': "Puede ser educativa o adictiva, según el uso que le des.",
+        'Twitter': "Puede generar ansiedad por sobreexposición a noticias o debates.",
+        'LinkedIn': "Enfocada en lo profesional. Suele tener bajo impacto negativo.",
+        'WhatsApp': "App de mensajería. Riesgo bajo si no genera ansiedad o dependencia."
     }
-    
-    if platform in platform_insights:
-        insights.append(f"Plataforma principal: {platform} - {platform_insights[platform]}")
-    
-    return insights
+    msg = f"Tu plataforma más usada es {platform}. "
+    return msg + risks.get(platform, "Plataforma no clasificada. Evalúa tu experiencia personal al usarla.")
 
-def calculate_academic_risk_score(user_data: Dict) -> Dict[str, Any]:
-    """Calcular puntaje de riesgo académico"""
-    score = 0
-    factors = []
-    
-    # Factor: Rendimiento académico actual
-    performance = safe_float(user_data.get('academic_performance', 75))
-    if performance < 60:
-        score += 30
-        factors.append("Rendimiento académico bajo")
-    elif performance < 75:
-        score += 15
-        factors.append("Rendimiento académico regular")
-    
-    # Factor: Uso excesivo de redes sociales
-    social_usage = safe_int(user_data.get('social_media_usage', 5))
-    if social_usage > 7:
-        score += 25
-        factors.append("Uso excesivo de redes sociales")
-    elif social_usage > 5:
-        score += 10
-        factors.append("Uso moderado-alto de redes sociales")
-    
-    # Factor: Pocas horas de estudio
-    study_hours = safe_int(user_data.get('study_hours', 25))
-    if study_hours < 15:
-        score += 20
-        factors.append("Pocas horas de estudio")
-    elif study_hours < 25:
-        score += 10
-        factors.append("Horas de estudio por debajo del promedio")
-    
-    # Factor: Plataforma de alto riesgo
-    platform = user_data.get('main_platform', '')
-    high_risk_platforms = ['TikTok', 'Instagram']
-    if platform in high_risk_platforms:
-        score += 15
-        factors.append(f"Uso de plataforma de alto riesgo ({platform})")
-    
-    # Determinar nivel de riesgo
-    if score >= 50:
-        risk_level = "Muy Alto"
-    elif score >= 35:
-        risk_level = "Alto"
-    elif score >= 20:
-        risk_level = "Medio"
-    elif score >= 10:
-        risk_level = "Bajo"
+def classify_social_media_usage(hours: float) -> str:
+    """Clasifica el nivel de uso diario de redes sociales."""
+    msg = f"Usas redes sociales {hours} horas al día. "
+    if hours <= 2:
+        return msg + "Uso bajo de redes sociales. Bien manejado."
+    elif hours <= 4:
+        return msg + "Uso moderado. Asegúrate de que no interfiera con tus actividades."
+    elif hours <= 6:
+        return msg + "Uso alto. Considera monitorear tu tiempo en redes."
     else:
-        risk_level = "Muy Bajo"
-    
-    return {
-        'risk_score': score,
-        'risk_level': risk_level,
-        'risk_factors': factors,
-        'recommendations': generate_risk_recommendations(score, factors)
-    }
+        return msg + "Uso excesivo. Podría estar afectando tu bienestar o productividad."
 
-def generate_risk_recommendations(risk_score: int, risk_factors: List[str]) -> List[str]:
-    """Generar recomendaciones basadas en factores de riesgo"""
+def classify_conflicts(conflicts: int) -> str:
+    """Evalúa los conflictos sociales en redes."""
+    msg = f"Has reportado {conflicts} conflictos en redes sociales. "
+    if conflicts == 0:
+        return msg + "No reportas conflictos en redes sociales, lo cual es positivo."
+    elif conflicts <= 2:
+        return msg + "Has tenido algunos conflictos. Considera evitar discusiones innecesarias."
+    else:
+        return msg + "Has tenido múltiples conflictos. Esto puede afectar tu estado emocional."
+
+def classify_addiction_score(score: float) -> str:
+    """Clasifica el nivel de adicción en base al puntaje calculado."""
+    msg = f"Tu puntaje de adicción es {score}. "
+    if score <= 3:
+        return msg + "Tu nivel de adicción es bajo. Tienes un buen control del tiempo en redes."
+    elif score <= 6:
+        return msg + "Tu nivel de adicción es moderado. Mantente alerta y cuida tu equilibrio digital."
+    elif score <= 8:
+        return msg + "Tu nivel de adicción es alto. Considera reducir el uso de redes."
+    else:
+        return msg + "Tu adicción a redes sociales es muy alta. Es importante hacer cambios en tu rutina."
+    
+def classify_academic_impact(affects: int) -> str:
+    """Clasifica si el rendimiento académico podría estar afectado."""
+    return "Tu estilo de vida digital podría estar afectando tus estudios." if affects else "No parece que tus hábitos digitales afecten tu rendimiento académico."
+
+def get_personal_recommendations(results: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Recibe los resultados de las funciones clasificadoras y genera recomendaciones
+    personalizadas en base a los factores detectados.
+    """
+
+    risk_factors = []
     recommendations = []
-    
-    if risk_score >= 35:
+
+    # Detectar factores de riesgo a partir de resultados previos
+    if results["addicted_score"] > 6:
+        risk_factors.append("Adicción elevada")
+
+    if results["sleep_hours"] < 5:
+        risk_factors.append("Pocas horas de sueño")
+
+    if results["affects_academic"]:
+        risk_factors.append("Afectación académica")
+
+    if results["conflicts"] > 2:
+        risk_factors.append("Conflictos frecuentes")
+
+    if results["usage_hours"] > 6:
+        risk_factors.append("Uso excesivo de redes sociales")
+
+    if results["platform"] in ["TikTok", "Instagram"]:
+        risk_factors.append(f"Uso de plataforma riesgosa ({results['platform']})")
+
+    # Generar recomendaciones base según número de factores
+    if len(risk_factors) >= 5:
         recommendations.extend([
-            "Buscar apoyo académico inmediato",
-            "Reducir drásticamente el tiempo en redes sociales",
-            "Implementar técnicas de estudio más efectivas",
-            "Considerar asesoramiento psicopedagógico"
+            "Establece horarios fijos para desconectarte digitalmente.",
+            "Busca acompañamiento profesional si sientes sobrecarga emocional.",
+            "Evita discusiones innecesarias en redes y prioriza el descanso.",
         ])
-    elif risk_score >= 20:
+    elif len(risk_factors) >= 3:
         recommendations.extend([
-            "Monitorear el tiempo en redes sociales",
-            "Incrementar las horas de estudio",
-            "Usar técnicas de gestión del tiempo",
-            "Establecer metas académicas claras"
+            "Reduce gradualmente el tiempo en redes sociales.",
+            "Haz pausas activas y descansos visuales frecuentes.",
+            "Revisa tus hábitos de sueño para mejorarlos."
         ])
     else:
         recommendations.extend([
-            "Mantener el equilibrio actual",
-            "Optimizar métodos de estudio",
-            "Continuar con hábitos saludables"
+            "Mantén tus hábitos actuales y sigue observando tu equilibrio digital.",
+            "Continúa priorizando tu bienestar emocional y académico."
         ])
-    
+
     # Recomendaciones específicas por factor
+    if "Adicción elevada" in risk_factors:
+        recommendations.append("Monitorea tu tiempo con apps como Digital Wellbeing o Forest.")
+
+    if "Pocas horas de sueño" in risk_factors:
+        recommendations.append("Crea una rutina de sueño estable y evita pantallas antes de dormir.")
+
+    if "Afectación académica" in risk_factors:
+        recommendations.append("Organiza tu día para tener tiempo claro para estudiar y descansar.")
+
+    if "Conflictos frecuentes" in risk_factors:
+        recommendations.append("Practica empatía y regula tus emociones en redes sociales.")
+
     if "Uso excesivo de redes sociales" in risk_factors:
-        recommendations.append("Usar aplicaciones de control de tiempo de pantalla")
-    
-    if "Pocas horas de estudio" in risk_factors:
-        recommendations.append("Crear un horario de estudio estructurado")
-    
-    if "Rendimiento académico bajo" in risk_factors:
-        recommendations.append("Revisar métodos de estudio y buscar ayuda adicional")
-    
-    return list(set(recommendations))  # Eliminar duplicados
+        recommendations.append("Configura límites de uso diario para cada aplicación.")
 
-def export_data_to_json(data: Any, filename: str = None) -> str:
-    """Exportar datos a JSON"""
-    if not filename:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"export_{timestamp}.json"
-    
-    try:
-        with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2, default=str)
-        return filename
-    except Exception as e:
-        logger.error(f"Error exportando datos: {str(e)}")
-        return ""
+    if any("riesgosa" in rf for rf in risk_factors):
+        recommendations.append("Evalúa si la plataforma que más usas aporta valor a tu vida diaria.")
 
-def validate_file_permissions(file_path: str) -> bool:
-    """Validar permisos de archivo"""
-    try:
-        # Verificar si el directorio existe y es escribible
-        directory = os.path.dirname(file_path)
-        if not os.path.exists(directory):
-            os.makedirs(directory, exist_ok=True)
-        
-        # Verificar permisos de escritura
-        return os.access(directory, os.W_OK)
-    except Exception as e:
-        logger.error(f"Error validando permisos: {str(e)}")
-        return False
-
-def clean_numeric_data(data: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
-    """Limpiar datos numéricos en DataFrame"""
-    cleaned_data = data.copy()
-    
-    for col in columns:
-        if col in cleaned_data.columns:
-            # Convertir a numérico, forzando errores a NaN
-            cleaned_data[col] = pd.to_numeric(cleaned_data[col], errors='coerce')
-            
-            # Rellenar NaN con la mediana
-            if cleaned_data[col].notna().any():
-                median_value = cleaned_data[col].median()
-                cleaned_data[col].fillna(median_value, inplace=True)
-    
-    return cleaned_data
+    return {
+        "risk_factors": risk_factors,
+        "recommendations": list(set(recommendations))  # Elimina duplicados
+    }
 
 def detect_outliers(data: pd.DataFrame, column: str, method: str = 'iqr') -> pd.Series:
     """Detectar outliers en una columna"""
@@ -365,25 +329,3 @@ def create_summary_statistics(data: pd.DataFrame) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error creando estadísticas resumen: {str(e)}")
         return {}
-
-def format_error_response(error: Exception, context: str = "") -> Dict[str, str]:
-    """Formatear respuesta de error para API"""
-    error_message = str(error)
-    
-    # Log del error
-    logger.error(f"Error en {context}: {error_message}")
-    
-    return {
-        'error': 'Error interno del servidor',
-        'message': error_message,
-        'context': context,
-        'timestamp': datetime.now().isoformat()
-    }
-
-def get_file_size_mb(file_path: str) -> float:
-    """Obtener tamaño de archivo en MB"""
-    try:
-        size_bytes = os.path.getsize(file_path)
-        return size_bytes / (1024 * 1024)
-    except:
-        return 0.0
