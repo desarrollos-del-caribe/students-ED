@@ -19,7 +19,6 @@ def predict_sleep():
             return jsonify({"error": "El campo 'social_media_usage' es obligatorio"}), 400
 
         result = predict_sleep_hours(data)
-        # Agregar recomendaciones basadas en la predicción
         predicted_hours = result.get("predicted_sleep_hours", 0)
         recommendations = []
         if predicted_hours < 6:
@@ -60,7 +59,6 @@ def predict_academic_impact_endpoint():
             return jsonify({"error": "Faltan campos requeridos: social_media_usage, sleep_hours_per_night, conflicts_over_social_media"}), 400
 
         result = predict_academic_impact(data)
-        # Agregar recomendaciones basadas en la predicción
         impact = result.get("academic_impact", "Unknown")
         recommendations = []
         if impact.lower() == "high":
@@ -99,7 +97,6 @@ def predict_academic_risk():
             return jsonify({"error": "Faltan campos requeridos"}), 400
 
         result = academic_performance_risk(user_data)
-        # Agregar recomendaciones basadas en el riesgo
         risk_level = result.get("risk_level", "Unknown")
         recommendations = []
         if risk_level.lower() == "high":
@@ -131,7 +128,6 @@ def predict_academic_risk():
 def get_student_performance(student_id):
     try:
         result = student_performance_prediction(student_id)
-        # Agregar recomendaciones basadas en el rendimiento
         performance = result.get("performance_level", "Unknown")
         recommendations = []
         if performance.lower() == "low":
@@ -162,7 +158,6 @@ def get_addiction_by_country():
     try:
         min_students = int(request.args.get('min_students', 5))
         result = addiction_by_country(min_students=min_students)
-        # Agregar recomendaciones generales basadas en las estadísticas
         recommendations = [
             "Promueva campañas de concienciación sobre el uso responsable de redes sociales en países con altos índices de adicción.",
             "Implemente programas educativos en escuelas para enseñar a los estudiantes sobre el impacto del uso excesivo de redes sociales.",
@@ -183,76 +178,79 @@ def predict_addiction_risk():
 
         required_fields = ["social_media_usage", "sleep_hours_per_night", "conflicts_over_social_media"]
         if not all(field in user_data for field in required_fields):
-            return jsonify({"error": "Faltan campos requeridos."}), 400
+            return jsonify({"error": "Faltan campos requeridos: social_media_usage, sleep_hours_per_night, conflicts_over_social_media."}), 400
 
         result = social_media_addiction_risk(user_data)
-        # Agregar recomendaciones basadas en el riesgo de adicción
-        risk_level = result.get("addiction_risk", "Unknown")
-        recommendations = []
-        if risk_level.lower() == "high":
-            recommendations = [
-                "Limite el tiempo diario en redes sociales usando herramientas de control de tiempo en pantalla.",
-                "Busque apoyo profesional, como un psicólogo, para abordar posibles signos de adicción.",
-                "Participe en actividades fuera de línea, como deportes o hobbies, para reducir la dependencia de las redes sociales."
-            ]
-        elif risk_level.lower() == "medium":
-            recommendations = [
-                "Establezca límites claros para el uso de redes sociales, como horarios específicos para su uso.",
-                "Practique la autoconciencia sobre los hábitos digitales y evalúe su impacto en la vida diaria.",
-                "Involúcrese en actividades sociales en persona para equilibrar el tiempo en línea."
-            ]
-        else:
-            recommendations = [
-                "Mantenga un uso responsable de las redes sociales para evitar el desarrollo de hábitos adictivos.",
-                "Eduque a otros sobre el uso equilibrado de redes sociales para promover hábitos saludables.",
-                "Monitoree periódicamente su tiempo en redes sociales para mantener un equilibrio saludable."
-            ]
-        result["recommendations"] = recommendations
         return jsonify(result), 200
 
     except Exception as e:
-        print(f"Error en /addiction-risk: {str(e)}")
-        return jsonify({"error": "Error al predecir riesgo de adicción."}), 500    
+        return jsonify({"error": "Error al predecir riesgo de adicción."}), 500
     
-@analysis_bp.route('/tree-visualization', methods=['GET'])
+@analysis_bp.route('/tree-visualization', methods=['POST'])
 def tree_visualization():
+    """
+    Endpoint para generar una visualización del árbol de decisión y recomendaciones personalizadas.
+    """
     try:
-        target = request.args.get("target", "Addicted_Score")
-        data = visualize_decision_tree(target)
-        # Agregar recomendaciones basadas en la visualización
-        recommendations = [
-            "Analice los factores principales del árbol de decisión para identificar áreas de mejora en los hábitos digitales.",
-            "Use los resultados del árbol para educar a los estudiantes sobre los factores que influyen en la adicción.",
-            "Considere realizar simulaciones con diferentes datos para entender mejor el impacto de cada variable."
+        user_data = request.get_json()
+        if not user_data:
+            return jsonify({"error": "No se proporcionaron datos del usuario."}), 400
+        mapped_user_data = {
+            "Avg_Daily_Usage_Hours": user_data.get("social_media_usage", 0),
+            "Sleep_Hours_Per_Night": user_data.get("sleep_hours_per_night", 0),
+            "Mental_Health_Score": user_data.get("mental_health_score", 5),  
+            "Addicted_Score": user_data.get("addicted_score", 0),  
+            "Conflicts_Over_Social_Media": user_data.get("conflicts_over_social_media", 0)
+        }
+
+        required_fields = [
+            "Avg_Daily_Usage_Hours",
+            "Sleep_Hours_Per_Night",
+            "Mental_Health_Score",
+            "Addicted_Score",
+            "Conflicts_Over_Social_Media"
         ]
-        data["recommendations"] = recommendations
+        if not all(field in mapped_user_data and mapped_user_data[field] is not None for field in required_fields):
+            missing_fields = [field for field in required_fields if field not in mapped_user_data or mapped_user_data[field] is None]
+            return jsonify({"error": f"Faltan campos requeridos: {', '.join(missing_fields)}."}), 400
+
+        target = request.args.get("target", "Addicted_Score")
+
+        data = visualize_decision_tree(target, mapped_user_data)
         return jsonify(data), 200
+
     except Exception as e:
-        return jsonify({"error": f"Error generando el árbol: {str(e)}"}), 500
+        return jsonify({"error": f"Error al generar el análisis: {str(e)}"}), 500
 
 @analysis_bp.route('/kmeans-clustering', methods=['POST'])
 def kmeans_visualization():
+    """
+    Endpoint para analizar el comportamiento del usuario y agruparlo en un perfil.
+    """
     try:
         user_data = request.get_json()
+        if not user_data:
+            return jsonify({"error": "No se proporcionaron datos del usuario."}), 400
+
+        required_fields = ["age", "social_media_usage", "sleep_hours_per_night", "conflicts_over_social_media"]
+        if not all(field in user_data for field in required_fields):
+            return jsonify({"error": f"Faltan campos requeridos: {', '.join(required_fields)}."}), 400
+
         n_clusters = int(request.args.get("clusters", 3))
+        if n_clusters < 2 or n_clusters > 10:
+            return jsonify({"error": "El número de grupos debe estar entre 2 y 10."}), 400
+
         data = run_kmeans_clustering(user_data, n_clusters)
-        # Agregar recomendaciones basadas en el clustering
-        recommendations = [
-            "Analice los clusters para identificar patrones de comportamiento y desarrollar estrategias específicas para cada grupo.",
-            "Dirija intervenciones específicas a los clusters con mayor riesgo de adicción o bajo rendimiento académico.",
-            "Use los resultados de clustering para personalizar planes de apoyo académico o de salud mental."
-        ]
-        data["recommendations"] = recommendations
         return jsonify(data), 200
+
     except Exception as e:
-        return jsonify({"error": f"Error en clustering: {str(e)}"}), 500
+        return jsonify({"error": f"Error al analizar los datos: {str(e)}"}), 500
 
 @analysis_bp.route('/correlation-heatmap', methods=['GET'])
 def get_correlation_heatmap():
     try:
         df = load_dataset()
         graph_data = plot_correlation_heatmap(df)
-        # Agregar recomendaciones basadas en el mapa de calor
         recommendations = [
             "Identifique las variables con alta correlación para enfocar intervenciones en esas áreas específicas.",
             "Use el mapa de calor para educar a los estudiantes sobre cómo el uso de redes sociales afecta otras variables.",
@@ -268,7 +266,6 @@ def analyze_mental_route():
     try:
         user_data = request.get_json()
         result = analyze_user(user_data)
-        # Agregar recomendaciones basadas en el análisis de salud mental
         mental_health_score = result.get("mental_health_score", 0)
         recommendations = []
         if mental_health_score < 30:
